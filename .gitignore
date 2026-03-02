@@ -1,0 +1,18 @@
+# Node
+node_modules/
+backend/node_modules/
+contracts/node_modules/
+
+# Hardhat
+contracts/artifacts/
+contracts/cache/
+contracts/typechain-types/
+
+# Environment
+.env
+backend/.env
+contracts/.env
+
+# Logs
+*.log
+

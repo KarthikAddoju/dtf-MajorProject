@@ -1,36 +1,39 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
-import "./globals.css";
-import Navbar from "../components/Navbar";
+import type { Metadata, Viewport } from "next"
+import { Inter } from "next/font/google"
+import ClientLayout from "@/components/ClientLayout"
+import { Analytics } from "@vercel/analytics/next"
+import { Toaster } from "sonner"
+import "./globals.css"
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
 
 export const metadata: Metadata = {
   title: "DACS - Decentralized Academic Credential System",
-  description: "Blockchain-based academic credential verification system",
-};
+  description:
+    "Secure, immutable, and verifiable academic credentials on the blockchain.",
+}
+
+export const viewport: Viewport = {
+  themeColor: "#0f0f23",
+}
 
 export default function RootLayout({
   children,
 }: {
-  children: React.ReactNode;
+  children: React.ReactNode
 }) {
   return (
-    <html lang="en">
+    <html lang="en" className="dark">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} bg-gray-950 text-white antialiased`}
+        className={`${inter.variable} font-sans antialiased min-h-screen bg-linear-to-br from-slate-950 via-slate-900 to-black text-white`}
       >
-        <Navbar />
-        {children}
+        <ClientLayout>{children}</ClientLayout>
+
+        {/* Web3 transaction notifications */}
+        <Toaster richColors position="top-right" />
+
+        <Analytics />
       </body>
     </html>
-  );
+  )
 }

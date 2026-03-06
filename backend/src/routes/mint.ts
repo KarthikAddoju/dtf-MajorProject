@@ -1,6 +1,6 @@
 import express from "express";
 import { ethers } from "ethers";
-
+import { authenticate, authorize } from "../middleware/authMiddleware";
 const router = express.Router();
 
 // Hardhat Local Network
@@ -25,48 +25,60 @@ const contract = new ethers.Contract(
   wallet
 );
 
-router.post("/", async (req, res) => {
-  try {
-    const { student, cid, eduAmount } = req.body;
+router.post(
+  "/",
+  authenticate,
+  authorize("admin"),
+  async (req, res) => {
+    try {
+      const { student, cid, eduAmount } = req.body;
 
-    const verifier = wallet.address;
-    const chainId = 31337;
+      const verifier = wallet.address;
+      const chainId = 31337;
 
-    const coder = ethers.AbiCoder.defaultAbiCoder();
+      // 🔥 Convert to 18 decimals properly
+      const parsedAmount = ethers.parseUnits(
+        eduAmount.toString(),
+        18
+      );
 
-    const encoded = coder.encode(
-      ["address", "uint256", "address", "string", "uint256"],
-      [controllerAddress, chainId, student, cid, eduAmount]
-    );
+      const coder = ethers.AbiCoder.defaultAbiCoder();
 
-    const messageHash = ethers.keccak256(encoded);
+      // ⚠️ IMPORTANT: Use parsedAmount here also
+      const encoded = coder.encode(
+        ["address", "uint256", "address", "string", "uint256"],
+        [controllerAddress, chainId, student, cid, parsedAmount]
+      );
 
-    const signature = await wallet.signMessage(
-      ethers.getBytes(messageHash)
-    );
+      const messageHash = ethers.keccak256(encoded);
 
-    const tx = await contract.dualMint(
-      student,
-      cid,
-      eduAmount,
-      verifier,
-      signature
-    );
+      const signature = await wallet.signMessage(
+        ethers.getBytes(messageHash)
+      );
 
-    await tx.wait();
+      const tx = await contract.dualMint(
+        student,
+        cid,
+        parsedAmount,   // 🔥 use parsedAmount
+        verifier,
+        signature
+      );
 
-    res.json({
-      success: true,
-      txHash: tx.hash
-    });
+      await tx.wait();
 
-  } catch (err: any) {
-    console.error(err);
-    res.status(500).json({
-      success: false,
-      error: err.message
-    });
+      res.json({
+        success: true,
+        txHash: tx.hash
+      });
+
+    } catch (err: any) {
+      console.error(err);
+      res.status(500).json({
+        success: false,
+        error: err.message
+      });
+    }
   }
-});
+);
 
 export default router;

@@ -26,9 +26,18 @@ router.post("/verify", (req, res) => {
     return res.status(401).json({ error: "Invalid signature" });
   }
 
-  const token = jwt.sign({ address }, JWT_SECRET, {
-    expiresIn: "1h",
-  });
+  // Example role logic (you can improve later)
+let role = "student";
+
+if (address.toLowerCase() === "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266") {
+  role = "admin";
+}
+
+const token = jwt.sign(
+  { address, role },
+  JWT_SECRET,
+  { expiresIn: "1h" }
+);
 
   res.json({ token });
 });

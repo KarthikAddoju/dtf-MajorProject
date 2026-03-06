@@ -16,3 +16,13 @@ contracts/.env
 # Logs
 *.log
 
+# Next.js
+frontend/.next/
+frontend/node_modules/
+
+# Backup frontend
+frontend_backup/node_modules/
+frontend_backup/.next/
+
+# Mac files
+.DS_Store

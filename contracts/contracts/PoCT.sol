@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract PoCT is ERC721, Ownable {
+contract PoCT is ERC721Enumerable, Ownable {
 
     uint256 private _tokenIds;
     address public mintController;
@@ -22,7 +22,7 @@ contract PoCT is ERC721, Ownable {
         _;
     }
 
-    constructor() 
+    constructor()
         ERC721("ProofOfCourseToken", "PoCT")
         Ownable(msg.sender)
     {}

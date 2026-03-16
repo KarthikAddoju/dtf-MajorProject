@@ -6,7 +6,11 @@ declare global {
   }
 }
 
+/**
+ * Connect wallet when user clicks "Connect Wallet"
+ */
 export async function connectWallet() {
+
   if (typeof window === "undefined") return null
 
   if (!window.ethereum) {
@@ -16,37 +20,41 @@ export async function connectWallet() {
 
   const provider = new BrowserProvider(window.ethereum)
 
-  const network = await provider.getNetwork()
-  console.log("Connected network:", network.chainId)
-
-  if (Number(network.chainId) !== 31337) {
-    alert("Please switch MetaMask to Hardhat Local Network (Chain ID: 31337)")
-    return null
-  }
-
+  // 🔹 First request wallet connection
   await provider.send("eth_requestAccounts", [])
 
   const signer = await provider.getSigner()
   const address = await signer.getAddress()
 
+  // 🔹 Now check network
+  const network = await provider.getNetwork()
+  const chainId = Number(network.chainId)
+
+  console.log("Connected network:", chainId)
+
+  // Accept both Hardhat chain IDs
+  if (chainId !== 31337 && chainId !== 1337) {
+    alert("Please switch MetaMask to Hardhat Local Network (Chain ID: 31337)")
+    return null
+  }
+
+  // Save wallet
   localStorage.setItem("walletAddress", address)
 
   return { provider, signer, address }
 }
 
+
+/**
+ * Auto reconnect wallet if already connected
+ */
 export async function getConnectedWallet() {
+
   if (typeof window === "undefined") return null
+
   if (!window.ethereum) return null
 
   const provider = new BrowserProvider(window.ethereum)
-
-  const network = await provider.getNetwork()
-  console.log("Connected network:", network.chainId)
-
-  if (Number(network.chainId) !== 31337) {
-    console.warn("Wrong network. Please switch to Hardhat.")
-    return null
-  }
 
   const accounts = await provider.send("eth_accounts", [])
 
@@ -54,6 +62,16 @@ export async function getConnectedWallet() {
 
   const signer = await provider.getSigner()
   const address = await signer.getAddress()
+
+  const network = await provider.getNetwork()
+  const chainId = Number(network.chainId)
+
+  console.log("Connected network:", chainId)
+
+  if (chainId !== 31337 && chainId !== 1337) {
+    console.warn("Wrong network. Please switch to Hardhat.")
+    return null
+  }
 
   return { provider, signer, address }
 }

@@ -4,13 +4,15 @@ interface RoleBadgeProps {
 
 export function RoleBadge({ role }: RoleBadgeProps) {
   const styles = {
-    student: "bg-blue-500/20 text-blue-400 border-blue-500/30",
-    admin: "bg-purple-500/20 text-purple-400 border-purple-500/30",
+    student:
+      "border border-[#8bbbd5]/20 bg-[#8bbbd5]/10 text-[#d8ebf5] before:bg-[#8bbbd5]",
+    admin:
+      "border border-[#d25b36]/25 bg-[#d25b36]/10 text-[#ffd7c8] before:bg-[#d25b36]",
   }
 
   return (
     <span
-      className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border ${styles[role]}`}
+      className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] before:h-1.5 before:w-1.5 before:rounded-full ${styles[role]}`}
     >
       {role.charAt(0).toUpperCase() + role.slice(1)}
     </span>

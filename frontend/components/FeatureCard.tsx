@@ -8,12 +8,15 @@ interface FeatureCardProps {
 
 export function FeatureCard({ title, description, icon }: FeatureCardProps) {
   return (
-    <div className="group bg-white/5 backdrop-blur-lg border border-white/10 rounded-2xl p-8 shadow-xl transition-all duration-300 hover:scale-[1.02] hover:border-white/20 hover:bg-white/[0.07]">
-      <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 border border-white/10 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
-        <div className="text-blue-400">{icon}</div>
+    <div className="brand-panel group p-8 transition-all duration-300 hover:-translate-y-1">
+      <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-[22px] border border-[#eedfce]/12 bg-[linear-gradient(145deg,rgba(210,91,54,0.16),rgba(131,188,217,0.14))] transition-transform duration-300 group-hover:scale-105">
+        <div className="text-[#ffe0c5]">{icon}</div>
       </div>
-      <h3 className="text-xl font-semibold text-white mb-3 text-balance">{title}</h3>
-      <p className="text-slate-400 leading-relaxed text-pretty">{description}</p>
+      <div className="mb-4 h-px w-16 bg-gradient-to-r from-[#d25b36] to-[#8bbbd5]" />
+      <h3 className="display-serif mb-3 text-[1.55rem] font-semibold text-[#f4efe5] text-balance">
+        {title}
+      </h3>
+      <p className="leading-relaxed text-[#b4c0d1] text-pretty">{description}</p>
     </div>
   )
 }

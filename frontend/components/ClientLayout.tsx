@@ -1,50 +1,54 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { AuthProvider, useAuth } from "@/components/AuthProvider"
 import { Navbar } from "@/components/Navbar"
-import { connectWallet, getConnectedWallet } from "@/lib/wallet"
-import { toast } from "sonner"
+
+function ClientShell({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  const {
+    chainId,
+    connectAndSignIn,
+    connectedWalletAddress,
+    hasWalletProvider,
+    isAuthenticated,
+    isAuthenticating,
+    isSupportedNetwork,
+    logout,
+    user,
+    walletWarning,
+  } = useAuth()
+
+  return (
+    <>
+      <Navbar
+        walletAddress={user?.address ?? connectedWalletAddress}
+        chainId={chainId}
+        hasWalletProvider={hasWalletProvider}
+        user={user}
+        isAuthenticated={isAuthenticated}
+        isSupportedNetwork={isSupportedNetwork}
+        isBusy={isAuthenticating}
+        walletWarning={walletWarning}
+        onConnectWallet={connectAndSignIn}
+        onLogout={logout}
+      />
+
+      {children}
+    </>
+  )
+}
 
 export default function ClientLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-
-  const [walletAddress, setWalletAddress] = useState<string | null>(null)
-
-  async function handleConnectWallet() {
-    const result = await connectWallet()
-
-    if (result) {
-      setWalletAddress(result.address)
-
-      toast.success("Wallet connected")
-    }
-  }
-
-  // 🔹 auto reconnect
-  useEffect(() => {
-    async function checkWallet() {
-      const result = await getConnectedWallet()
-
-      if (result) {
-        setWalletAddress(result.address)
-      }
-    }
-
-    checkWallet()
-  }, [])
-
   return (
-    <>
-      <Navbar
-        walletAddress={walletAddress}
-        isConnected={!!walletAddress}
-        onConnectWallet={handleConnectWallet}
-      />
-
-      {children}
-    </>
+    <AuthProvider>
+      <ClientShell>{children}</ClientShell>
+    </AuthProvider>
   )
 }

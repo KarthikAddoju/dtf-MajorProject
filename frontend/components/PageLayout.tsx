@@ -1,26 +1,15 @@
 "use client"
 
-import { ReactNode, useState } from "react"
-
+import { ReactNode } from "react"
 
 interface PageLayoutProps {
   children: ReactNode
 }
 
 export function PageLayout({ children }: PageLayoutProps) {
-  const [isConnected, setIsConnected] = useState(false)
-  const [walletAddress, setWalletAddress] = useState<string | null>(null)
-
-  const handleConnectWallet = () => {
-    // Mock wallet connection - in production this would use actual wallet logic
-    setIsConnected(true)
-    setWalletAddress("0x1234567890abcdef1234567890abcdef12345678")
-  }
-
   return (
-    <div className="min-h-screen">
-      
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+    <div className="brand-shell min-h-screen">
+      <main className="brand-grid relative mx-auto max-w-[1480px] px-4 py-8 sm:px-6 sm:py-10 lg:px-8 lg:py-12">
         {children}
       </main>
     </div>

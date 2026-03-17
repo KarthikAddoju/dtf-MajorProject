@@ -1,10 +1,16 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
+import { sendError } from "../lib/api";
 
-const JWT_SECRET = "supersecret";
+const JWT_SECRET = process.env.JWT_SECRET ?? "supersecret";
 
-interface AuthRequest extends Request {
-  user?: any;
+export interface AuthTokenPayload extends jwt.JwtPayload {
+  address: string;
+  role: string;
+}
+
+export interface AuthRequest extends Request {
+  user?: AuthTokenPayload;
 }
 
 export const authenticate = (
@@ -14,25 +20,38 @@ export const authenticate = (
 ) => {
   const authHeader = req.headers.authorization;
 
-  if (!authHeader) {
-    return res.status(401).json({ error: "No token provided" });
+  if (!authHeader?.startsWith("Bearer ")) {
+    return sendError(res, 401, "UNAUTHORIZED", "No token provided");
   }
 
-  const token = authHeader.split(" ")[1];
+  const token = authHeader.slice("Bearer ".length).trim();
+
+  if (!token) {
+    return sendError(res, 401, "UNAUTHORIZED", "No token provided");
+  }
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = decoded;
+
+    if (
+      typeof decoded === "string" ||
+      typeof decoded.address !== "string" ||
+      typeof decoded.role !== "string"
+    ) {
+      return sendError(res, 401, "INVALID_TOKEN", "Invalid token");
+    }
+
+    req.user = decoded as AuthTokenPayload;
     next();
   } catch {
-    return res.status(401).json({ error: "Invalid token" });
+    return sendError(res, 401, "INVALID_TOKEN", "Invalid token");
   }
 };
 
 export const authorize = (role: string) => {
   return (req: AuthRequest, res: Response, next: NextFunction) => {
     if (req.user?.role !== role) {
-      return res.status(403).json({ error: "Forbidden" });
+      return sendError(res, 403, "FORBIDDEN", "Forbidden");
     }
     next();
   };

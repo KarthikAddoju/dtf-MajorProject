@@ -1,29 +1,19 @@
 import express from "express";
 import { ethers } from "ethers";
+import { sendError, sendSuccess, handleServerError } from "../lib/api";
+import { createAuditTrailEvent } from "../lib/audit";
 import { authenticate, authorize } from "../middleware/authMiddleware";
+import { parsePositiveNumber, isValidObjectId } from "../lib/validation";
+import { CertificateSubmissionModel } from "../models/CertificateSubmission";
+import {
+  buildMintSignature,
+  isCurrentVerifierAuthorized,
+  mintControllerContract,
+  parseDualMintReceipt,
+  wallet,
+} from "../services/blockchain";
+
 const router = express.Router();
-
-// Hardhat Local Network
-const provider = new ethers.JsonRpcProvider("http://127.0.0.1:8545");
-
-// Use Account #0 as backend signer
-const privateKey =
-  "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
-
-const wallet = new ethers.Wallet(privateKey, provider);
-
-// IMPORTANT: Replace with your deployed MintController address
-const controllerAddress = "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0";
-
-const controllerABI = [
-  "function dualMint(address student,string cid,uint256 eduAmount,address verifier,bytes signature) external"
-];
-
-const contract = new ethers.Contract(
-  controllerAddress,
-  controllerABI,
-  wallet
-);
 
 router.post(
   "/",
@@ -31,52 +21,146 @@ router.post(
   authorize("admin"),
   async (req, res) => {
     try {
-      const { student, cid, eduAmount } = req.body;
+      const { submissionId, eduAmount, reviewNote } = req.body as {
+        submissionId?: string;
+        eduAmount?: unknown;
+        reviewNote?: unknown;
+      };
 
-      const verifier = wallet.address;
-      const chainId = 31337;
+      if (
+        typeof submissionId !== "string" ||
+        !isValidObjectId(submissionId) ||
+        eduAmount === undefined ||
+        (reviewNote !== undefined && typeof reviewNote !== "string")
+      ) {
+        return sendError(
+          res,
+          400,
+          "VALIDATION_ERROR",
+          "submissionId and eduAmount are required"
+        );
+      }
 
-      // 🔥 Convert to 18 decimals properly
-      const parsedAmount = ethers.parseUnits(
-        eduAmount.toString(),
-        18
+      const parsedEduAmount = parsePositiveNumber(eduAmount);
+
+      if (!parsedEduAmount) {
+        return sendError(
+          res,
+          400,
+          "VALIDATION_ERROR",
+          "eduAmount must be a positive number"
+        );
+      }
+
+      const submission = await CertificateSubmissionModel.findById(submissionId);
+
+      if (!submission) {
+        return sendError(
+          res,
+          404,
+          "SUBMISSION_NOT_FOUND",
+          "Submission not found"
+        );
+      }
+
+      if (submission.status !== "pending_review") {
+        return sendError(
+          res,
+          409,
+          "SUBMISSION_NOT_MINTABLE",
+          "Only pending submissions can be minted"
+        );
+      }
+
+      const verifierAuthorized = await isCurrentVerifierAuthorized();
+
+      if (!verifierAuthorized) {
+        return sendError(
+          res,
+          409,
+          "VERIFIER_NOT_AUTHORIZED",
+          "The configured backend signer is not an authorized verifier"
+        );
+      }
+
+      const parsedAmountWei = ethers.parseUnits(parsedEduAmount.toString(), 18);
+      const signature = await buildMintSignature(
+        submission.studentAddress,
+        submission.cid,
+        parsedAmountWei
       );
 
-      const coder = ethers.AbiCoder.defaultAbiCoder();
-
-      // ⚠️ IMPORTANT: Use parsedAmount here also
-      const encoded = coder.encode(
-        ["address", "uint256", "address", "string", "uint256"],
-        [controllerAddress, chainId, student, cid, parsedAmount]
-      );
-
-      const messageHash = ethers.keccak256(encoded);
-
-      const signature = await wallet.signMessage(
-        ethers.getBytes(messageHash)
-      );
-
-      const tx = await contract.dualMint(
-        student,
-        cid,
-        parsedAmount,   // 🔥 use parsedAmount
-        verifier,
+      const tx = await mintControllerContract.dualMint(
+        submission.studentAddress,
+        submission.cid,
+        parsedAmountWei,
+        wallet.address,
         signature
       );
 
-      await tx.wait();
+      const receipt = await tx.wait();
 
-      res.json({
-        success: true,
-        txHash: tx.hash
+      if (!receipt) {
+        return sendError(
+          res,
+          500,
+          "MINT_RECEIPT_MISSING",
+          "The mint transaction completed without a receipt"
+        );
+      }
+
+      const tokenId = parseDualMintReceipt(receipt);
+
+      if (!tokenId) {
+        return sendError(
+          res,
+          500,
+          "TOKEN_ID_NOT_FOUND",
+          "Mint succeeded but tokenId could not be extracted"
+        );
+      }
+
+      const now = new Date();
+
+      submission.status = "minted";
+      submission.eduAmount = parsedEduAmount;
+      submission.eduAmountWei = parsedAmountWei.toString();
+      submission.tokenId = tokenId;
+      submission.txHash = tx.hash;
+      submission.verifierAddress = wallet.address.toLowerCase();
+      submission.reviewNote =
+        typeof reviewNote === "string" && reviewNote.trim().length > 0
+          ? reviewNote.trim()
+          : submission.reviewNote;
+      submission.reviewedAt = now;
+      submission.mintedAt = now;
+      submission.auditTrail = [
+        ...(submission.auditTrail ?? []),
+        createAuditTrailEvent({
+          type: "submission_minted",
+          title: "Credential minted on-chain",
+          description:
+            "Admin approved the submission and minted the PoCT certificate with EDU rewards.",
+          actorAddress: wallet.address,
+          metadata: {
+            tokenId,
+            txHash: tx.hash,
+            eduAmount: parsedEduAmount,
+            status: "minted",
+          },
+        }),
+      ];
+      await submission.save();
+
+      return sendSuccess(res, {
+        txHash: tx.hash,
+        tokenId,
+        eduAmount: parsedEduAmount,
+        submissionId: submission.id,
       });
 
-    } catch (err: any) {
-      console.error(err);
-      res.status(500).json({
-        success: false,
-        error: err.message
-      });
+    } catch (err) {
+      return handleServerError(res, err, "Mint failed");
     }
   }
 );

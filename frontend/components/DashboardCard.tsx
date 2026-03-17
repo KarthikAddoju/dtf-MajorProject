@@ -8,15 +8,18 @@ interface DashboardCardProps {
 
 export function DashboardCard({ title, children, className = "" }: DashboardCardProps) {
   return (
-    <div
-      className={`bg-white/5 backdrop-blur-lg border border-white/10 rounded-2xl shadow-xl ${className}`}
-    >
+    <div className={`brand-panel ${className}`}>
       {title && (
-        <div className="px-6 py-4 border-b border-white/10">
-          <h3 className="text-lg font-semibold text-white">{title}</h3>
+        <div className="border-b border-[#eedfce]/10 px-6 py-5">
+          <div className="mb-2 text-[11px] uppercase tracking-[0.28em] text-[#8ea0b8]">
+            Workspace
+          </div>
+          <h3 className="display-serif text-[1.5rem] font-semibold tracking-[-0.03em] text-[#f4efe5]">
+            {title}
+          </h3>
         </div>
       )}
-      <div className="p-6">{children}</div>
+      <div className="relative p-6">{children}</div>
     </div>
   )
 }

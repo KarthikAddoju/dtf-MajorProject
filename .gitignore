@@ -9,6 +9,9 @@ frontend_backup/node_modules/
 contracts/artifacts/
 contracts/cache/
 contracts/typechain-types/
+contracts/.npm/
+contracts/Library/
+contracts/deployments/
 
 # Next.js
 frontend/.next/

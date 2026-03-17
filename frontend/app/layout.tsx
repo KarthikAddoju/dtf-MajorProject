@@ -1,11 +1,8 @@
 import type { Metadata, Viewport } from "next"
-import { Inter } from "next/font/google"
 import ClientLayout from "@/components/ClientLayout"
 import { Analytics } from "@vercel/analytics/next"
 import { Toaster } from "sonner"
 import "./globals.css"
-
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
 
 export const metadata: Metadata = {
   title: "DACS - Decentralized Academic Credential System",
@@ -14,7 +11,7 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  themeColor: "#0f0f23",
+  themeColor: "#090d16",
 }
 
 export default function RootLayout({
@@ -24,9 +21,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="dark">
-      <body
-        className={`${inter.variable} font-sans antialiased min-h-screen bg-linear-to-br from-slate-950 via-slate-900 to-black text-white`}
-      >
+      <body className="min-h-screen bg-[#090d16] font-sans text-[#f6efe3] antialiased">
         <ClientLayout>{children}</ClientLayout>
 
         {/* Web3 transaction notifications */}

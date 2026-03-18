@@ -140,7 +140,7 @@ router.post(
           type: "submission_minted",
           title: "Credential minted on-chain",
           description:
-            "Admin approved the submission and minted the PoCT certificate with EDU rewards.",
+            "Admin approved the submission and minted the PoCT credential with EDU rewards.",
           actorAddress: wallet.address,
           metadata: {
             tokenId,

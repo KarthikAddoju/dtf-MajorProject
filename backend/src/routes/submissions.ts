@@ -2,6 +2,7 @@ import { Router } from "express";
 import { sendError, sendSuccess, handleServerError } from "../lib/api";
 import { createAuditTrailEvent, toAuditTrailResponse } from "../lib/audit";
 import {
+  CREDENTIAL_TYPES,
   CERTIFICATE_STATUSES,
   CertificateSubmissionModel,
 } from "../models/CertificateSubmission";
@@ -14,6 +15,7 @@ function toSubmissionResponse(submission: {
   _id: unknown;
   studentAddress: string;
   courseName: string;
+  credentialType?: (typeof CREDENTIAL_TYPES)[number];
   instituteId: unknown;
   instituteName: string;
   cid: string;
@@ -42,6 +44,7 @@ function toSubmissionResponse(submission: {
     id: String(submission._id),
     studentAddress: submission.studentAddress,
     courseName: submission.courseName,
+    credentialType: submission.credentialType ?? "course",
     instituteId: String(submission.instituteId),
     instituteName: submission.instituteName,
     cid: submission.cid,

@@ -5,6 +5,7 @@ interface ExportInput {
   issuedAt: string;
   cid: string;
   courseName: string;
+  credentialType: string;
   instituteName: string;
   instituteSlug: string | null;
   eduAmount: number | null;
@@ -39,6 +40,38 @@ function toDidPkh(chainId: number, address: string) {
   return `did:pkh:eip155:${chainId}:${address.toLowerCase()}`;
 }
 
+function formatCredentialTypeLabel(credentialType: string) {
+  return credentialType
+    .split("_")
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(" ");
+}
+
+function mapAchievementType(credentialType: string) {
+  switch (credentialType) {
+    case "workshop":
+      return "Workshop";
+    case "quiz":
+      return "Assessment";
+    case "hackathon":
+      return "Competition";
+    case "competition":
+      return "Competition";
+    case "seminar":
+      return "Seminar";
+    case "bootcamp":
+      return "Course";
+    case "internship":
+      return "Internship";
+    case "certification":
+      return "Certification";
+    case "other":
+      return "Achievement";
+    default:
+      return "Certificate";
+  }
+}
+
 function buildIssuerProfile(
   frontendOrigin: string,
   instituteName: string,
@@ -71,6 +104,8 @@ export function buildCredentialExports(
     input.instituteSlug
   );
   const subjectDid = toDidPkh(input.chainId, input.studentAddress);
+  const credentialTypeLabel = formatCredentialTypeLabel(input.credentialType);
+  const achievementType = mapAchievementType(input.credentialType);
   const proofAnchor = {
     type: "BlockchainProofAnchor",
     verificationPage,
@@ -98,7 +133,7 @@ export function buildCredentialExports(
 
   const criteriaNarrative =
     "The learner submitted evidence through DACS, the institute verifier reviewed the submission, and the credential was minted on-chain after approval.";
-  const credentialDescription = `${input.courseName} credential issued by ${input.instituteName}, anchored to DACS and linked to on-chain PoCT token #${input.tokenId}.`;
+  const credentialDescription = `${credentialTypeLabel} credential "${input.courseName}" issued by ${input.instituteName}, anchored to DACS and linked to on-chain PoCT token #${input.tokenId}.`;
 
   const verifiableCredential = {
     "@context": sharedContext,
@@ -114,8 +149,8 @@ export function buildCredentialExports(
         id: `${verificationPage}#achievement`,
         type: "Achievement",
         name: input.courseName,
-        description: `Academic completion credential for ${input.courseName}.`,
-        achievementType: "Certificate",
+        description: `${credentialTypeLabel} credential issued for ${input.courseName}.`,
+        achievementType,
         criteria: {
           type: "Criteria",
           narrative: criteriaNarrative,
@@ -126,6 +161,7 @@ export function buildCredentialExports(
         name: input.instituteName,
       },
       tokenId: input.tokenId,
+      credentialType: input.credentialType,
       sourceCid: input.cid,
       verificationPage,
       eduReward: input.eduAmount,
@@ -147,7 +183,7 @@ export function buildCredentialExports(
     "@context": sharedContext,
     id: `${verificationPage}#open-badge`,
     type: ["VerifiableCredential", "OpenBadgeCredential"],
-    name: `${input.courseName} Completion Badge`,
+    name: `${input.courseName} ${credentialTypeLabel} Badge`,
     description: credentialDescription,
     issuer,
     validFrom: input.issuedAt,
@@ -159,8 +195,8 @@ export function buildCredentialExports(
         id: `${verificationPage}#achievement`,
         type: "Achievement",
         name: input.courseName,
-        description: `Completion badge issued for ${input.courseName}.`,
-        achievementType: "Certificate",
+        description: `${credentialTypeLabel} badge issued for ${input.courseName}.`,
+        achievementType,
         criteria: {
           type: "Criteria",
           narrative: criteriaNarrative,

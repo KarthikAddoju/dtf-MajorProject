@@ -13,9 +13,10 @@ import {
   connectWallet,
   getConnectedWallet,
   hasInjectedWalletProvider,
+  isWalletActionRejected,
   WalletConnectionError,
 } from "@/lib/wallet"
-import type { AuthUser } from "@/lib/types"
+import type { AuthFlowState, AuthUser } from "@/lib/types"
 
 interface AuthContextValue {
   token: string | null
@@ -27,6 +28,8 @@ interface AuthContextValue {
   isReady: boolean
   isAuthenticating: boolean
   isAuthenticated: boolean
+  authFlowState: AuthFlowState
+  walletNote: string | null
   walletWarning: string | null
   connectAndSignIn: () => Promise<void>
   logout: () => void
@@ -49,28 +52,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [chainId, setChainId] = useState<number | null>(null)
   const [hasWalletProvider, setHasWalletProvider] = useState(false)
   const [walletWarning, setWalletWarning] = useState<string | null>(null)
+  const [walletNote, setWalletNote] = useState<string | null>(null)
   const [isReady, setIsReady] = useState(false)
   const [isAuthenticating, setIsAuthenticating] = useState(false)
+  const [authFlowState, setAuthFlowState] = useState<AuthFlowState>("idle")
 
   useEffect(() => {
     let cancelled = false
 
     async function restoreSession() {
+      let restoredWallet: Awaited<ReturnType<typeof getConnectedWallet>> = null
+
       try {
         setHasWalletProvider(hasInjectedWalletProvider())
+        const storedToken = window.localStorage.getItem(TOKEN_STORAGE_KEY)
         const wallet = await getConnectedWallet()
+        restoredWallet = wallet
 
         if (!cancelled) {
           setConnectedWalletAddress(wallet?.address ?? null)
           setChainId(wallet?.chainId ?? null)
+          setAuthFlowState(
+            wallet?.address ? (storedToken ? "authenticated" : "wallet_connected") : "idle"
+          )
           setWalletWarning(
             wallet && !wallet.isSupportedNetwork
               ? "Switch MetaMask to the Hardhat localhost network to use authenticated flows."
               : null
           )
         }
-
-        const storedToken = window.localStorage.getItem(TOKEN_STORAGE_KEY)
 
         if (!storedToken) {
           return
@@ -87,6 +97,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (!cancelled) {
             setToken(null)
             setUser(null)
+            setAuthFlowState(wallet?.address ? "wallet_connected" : "idle")
+            setWalletNote(null)
             setWalletWarning(
               "Your connected wallet changed, so the previous DACS session was cleared for safety."
             )
@@ -98,6 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!cancelled) {
           setToken(storedToken)
           setUser(restoredUser)
+          setAuthFlowState("authenticated")
         }
       } catch {
         window.localStorage.removeItem(TOKEN_STORAGE_KEY)
@@ -105,6 +118,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!cancelled) {
           setToken(null)
           setUser(null)
+          setAuthFlowState(restoredWallet?.address ? "wallet_connected" : "idle")
         }
       } finally {
         if (!cancelled) {
@@ -131,25 +145,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           : null
 
       setConnectedWalletAddress(nextAddress)
+      setWalletNote(null)
 
       if (user?.address && nextAddress && user.address !== nextAddress) {
         window.localStorage.removeItem(TOKEN_STORAGE_KEY)
         setToken(null)
         setUser(null)
+        setAuthFlowState("wallet_connected")
         setWalletWarning(
           "The connected wallet changed. Sign in again to continue with DACS."
         )
+        return
+      }
+
+      if (user?.address && nextAddress && user.address === nextAddress) {
+        setAuthFlowState("authenticated")
+        setWalletWarning(null)
+        return
       }
 
       if (!nextAddress) {
+        setAuthFlowState("idle")
         setWalletWarning("MetaMask is disconnected. Reconnect it for upload and admin actions.")
+        return
       }
+
+      setAuthFlowState("wallet_connected")
+      setWalletWarning(null)
     }
 
     const handleChainChanged = () => {
       getConnectedWallet()
         .then((wallet) => {
           setChainId(wallet?.chainId ?? null)
+          setAuthFlowState(
+            wallet?.address ? (user?.address ? "authenticated" : "wallet_connected") : "idle"
+          )
+          setWalletNote(null)
           setWalletWarning(
             wallet && !wallet.isSupportedNetwork
               ? "Switch MetaMask to the Hardhat localhost network to continue."
@@ -173,9 +205,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function connectAndSignIn() {
     setIsAuthenticating(true)
+    setWalletWarning(null)
+    setWalletNote(null)
+    setAuthFlowState("connecting_wallet")
+    let attemptedWalletAddress: string | null = null
 
     try {
       const wallet = await connectWallet()
+      attemptedWalletAddress = wallet.address
+      setConnectedWalletAddress(wallet.address)
+      setChainId(wallet.chainId)
+      setAuthFlowState("awaiting_signature")
       const { message } = await requestAuthChallenge(wallet.address)
       const signature = await wallet.signer.signMessage(message)
       const verified = await verifyAuthChallenge(wallet.address, message, signature)
@@ -190,6 +230,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setConnectedWalletAddress(wallet.address)
       setChainId(wallet.chainId)
       setWalletWarning(null)
+      setWalletNote(null)
+      setAuthFlowState("authenticated")
 
       toast.success(
         nextUser.role === "admin"
@@ -197,12 +239,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           : "Wallet connected and signed in to DACS."
       )
     } catch (error) {
+      if (isWalletActionRejected(error)) {
+        setWalletWarning(null)
+        setWalletNote("Sign-in was canceled. You can try again whenever you're ready.")
+        setAuthFlowState(attemptedWalletAddress ? "wallet_connected" : "idle")
+        return
+      }
+
       const message =
         error instanceof WalletConnectionError || error instanceof Error
           ? error.message
           : "Could not sign in with your wallet."
 
       setWalletWarning(message)
+      setWalletNote(null)
+      setAuthFlowState(attemptedWalletAddress ? "wallet_connected" : "idle")
       toast.error(message)
     } finally {
       setIsAuthenticating(false)
@@ -213,6 +264,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.localStorage.removeItem(TOKEN_STORAGE_KEY)
     setToken(null)
     setUser(null)
+    setWalletWarning(null)
+    setWalletNote(null)
+    setAuthFlowState(connectedWalletAddress ? "wallet_connected" : "idle")
     toast.success("Signed out of DACS")
   }
 
@@ -231,6 +285,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isReady,
         isAuthenticating,
         isAuthenticated: !!token && !!user,
+        authFlowState,
+        walletNote,
         walletWarning,
         connectAndSignIn,
         logout,

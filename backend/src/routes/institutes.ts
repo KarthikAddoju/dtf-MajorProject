@@ -132,6 +132,7 @@ router.get("/:slug/profile", async (req, res) => {
       ]),
       CertificateSubmissionModel.aggregate<{
         courseName: string;
+        credentialType: string;
         mintedCount: number;
         totalEduMinted: number;
       }>([
@@ -143,7 +144,10 @@ router.get("/:slug/profile", async (req, res) => {
         },
         {
           $group: {
-            _id: "$courseName",
+            _id: {
+              courseName: "$courseName",
+              credentialType: "$credentialType",
+            },
             mintedCount: { $sum: 1 },
             totalEduMinted: { $sum: { $ifNull: ["$eduAmount", 0] } },
           },
@@ -151,7 +155,8 @@ router.get("/:slug/profile", async (req, res) => {
         {
           $project: {
             _id: 0,
-            courseName: "$_id",
+            courseName: "$_id.courseName",
+            credentialType: { $ifNull: ["$_id.credentialType", "course"] },
             mintedCount: 1,
             totalEduMinted: 1,
           },
@@ -201,6 +206,7 @@ router.get("/:slug/profile", async (req, res) => {
           id: String(submission._id),
           tokenId: submission.tokenId ?? null,
           courseName: submission.courseName,
+          credentialType: submission.credentialType ?? "course",
           studentAddress: submission.studentAddress,
           verifierAddress: submission.verifierAddress ?? null,
           eduAmount: submission.eduAmount ?? null,

@@ -1,4 +1,8 @@
-import type { AuditTrailEvent, AuditTrailEventType } from "@/lib/types"
+import type {
+  AuditTrailEvent,
+  AuditTrailEventType,
+  CredentialType,
+} from "@/lib/types"
 
 export function formatDateTime(value: string | null) {
   if (!value) {
@@ -17,6 +21,13 @@ export function truncateValue(value: string, start = 10, end = 8) {
   }
 
   return `${value.slice(0, start)}...${value.slice(-end)}`
+}
+
+export function formatCredentialTypeLabel(value: CredentialType | string) {
+  return value
+    .split("_")
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(" ")
 }
 
 export function getAuditTrailEventAccent(type: AuditTrailEventType) {

@@ -7,6 +7,19 @@ export const CERTIFICATE_STATUSES = [
   "minted",
 ] as const;
 
+export const CREDENTIAL_TYPES = [
+  "course",
+  "workshop",
+  "quiz",
+  "hackathon",
+  "competition",
+  "seminar",
+  "bootcamp",
+  "internship",
+  "certification",
+  "other",
+] as const;
+
 const auditTrailEventSchema = new Schema(
   {
     type: {
@@ -56,6 +69,13 @@ const certificateSubmissionSchema = new Schema(
       type: String,
       required: true,
       trim: true,
+    },
+    credentialType: {
+      type: String,
+      enum: CREDENTIAL_TYPES,
+      default: "course",
+      required: true,
+      index: true,
     },
     instituteId: {
       type: Schema.Types.ObjectId,

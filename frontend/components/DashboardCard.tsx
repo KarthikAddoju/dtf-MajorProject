@@ -8,7 +8,7 @@ interface DashboardCardProps {
 
 export function DashboardCard({ title, children, className = "" }: DashboardCardProps) {
   return (
-    <div className={`brand-panel ${className}`}>
+    <div className={`brand-panel brand-card-hover ${className}`}>
       {title && (
         <div className="border-b border-[#eedfce]/10 px-6 py-5">
           <div className="mb-2 text-[11px] uppercase tracking-[0.28em] text-[#8ea0b8]">

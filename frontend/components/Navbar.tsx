@@ -2,10 +2,11 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { StatusBanner } from "./StatusBanner"
 import { WalletBadge } from "./WalletBadge"
 import { RoleBadge } from "./RoleBadge"
-import { getWalletNetworkLabel } from "@/lib/wallet"
-import type { AuthUser } from "@/lib/types"
+import { getWalletNetworkLabel, getWalletSignInLabel } from "@/lib/wallet"
+import type { AuthFlowState, AuthUser } from "@/lib/types"
 
 const navLinks = [
   { href: "/", label: "Home" },
@@ -24,6 +25,8 @@ interface NavbarProps {
   isAuthenticated?: boolean
   isSupportedNetwork?: boolean
   isBusy?: boolean
+  authFlowState?: AuthFlowState
+  walletNote?: string | null
   walletWarning?: string | null
   onConnectWallet?: () => void | Promise<void>
   onLogout?: () => void
@@ -37,6 +40,8 @@ export function Navbar({
   isAuthenticated = false,
   isSupportedNetwork = false,
   isBusy = false,
+  authFlowState = "idle",
+  walletNote,
   walletWarning,
   onConnectWallet,
   onLogout,
@@ -47,11 +52,17 @@ export function Navbar({
     ? user?.role === "admin"
       ? "Admin Session"
       : "Student Session"
-    : walletAddress
-      ? "Wallet Connected"
-      : "Guest Mode"
+    : authFlowState === "awaiting_signature"
+      ? "Awaiting Signature"
+      : authFlowState === "connecting_wallet"
+        ? "Connecting Wallet"
+        : walletAddress
+          ? "Wallet Connected"
+          : "Guest Mode"
   const sessionTone = isAuthenticated
     ? "border-[#8bbbd5]/20 bg-[#8bbbd5]/10 text-[#d8ebf5]"
+    : authFlowState === "awaiting_signature" || authFlowState === "connecting_wallet"
+      ? "border-[#f0c57f]/24 bg-[#f0c57f]/10 text-[#fde4b8]"
     : walletAddress
       ? "border-[#d25b36]/25 bg-[#d25b36]/10 text-[#ffd7c8]"
       : "border-[#eedfce]/12 bg-[#101726]/72 text-[#d4dbeb]"
@@ -64,6 +75,7 @@ export function Navbar({
   const warningMessage = !hasWalletProvider
     ? "MetaMask was not detected in this browser. Install it to unlock upload, admin review, and signed dashboard flows."
     : walletWarning
+  const walletActionLabel = getWalletSignInLabel(authFlowState, Boolean(walletAddress))
 
   const primaryAction =
     isAuthenticated && user?.role === "admin"
@@ -175,21 +187,32 @@ export function Navbar({
                   disabled={isBusy}
                   className="brand-button-primary px-4 py-3 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {isBusy
-                    ? "Connecting..."
-                    : walletAddress
-                      ? "Complete Sign-In"
-                      : "Connect & Sign In"}
+                  {walletActionLabel}
                 </button>
               )}
             </div>
           </div>
           <div className="brand-divider" />
 
-          {warningMessage ? (
+          {warningMessage || walletNote ? (
             <div className="px-5 py-4">
-              <div className="rounded-[22px] border border-[#f0c57f]/18 bg-[#f0c57f]/10 px-4 py-3 text-sm text-[#fde4b8]">
-              {warningMessage}
+              <div className="space-y-3">
+                {warningMessage ? (
+                  <StatusBanner
+                    compact
+                    tone="warning"
+                    title="Wallet Attention"
+                    message={warningMessage}
+                  />
+                ) : null}
+                {walletNote ? (
+                  <StatusBanner
+                    compact
+                    tone="neutral"
+                    title="Session Note"
+                    message={walletNote}
+                  />
+                ) : null}
               </div>
             </div>
           ) : null}

@@ -20,6 +20,13 @@ export interface AuthUser {
   role: UserRole
 }
 
+export type AuthFlowState =
+  | "idle"
+  | "wallet_connected"
+  | "connecting_wallet"
+  | "awaiting_signature"
+  | "authenticated"
+
 export interface Institute {
   id: string
   name: string
@@ -31,11 +38,36 @@ export interface Institute {
 }
 
 export type SubmissionStatus = "pending_review" | "rejected" | "minted"
+export type CredentialType =
+  | "course"
+  | "workshop"
+  | "quiz"
+  | "hackathon"
+  | "competition"
+  | "seminar"
+  | "bootcamp"
+  | "internship"
+  | "certification"
+  | "other"
+
+export const CREDENTIAL_TYPE_OPTIONS: CredentialType[] = [
+  "course",
+  "workshop",
+  "quiz",
+  "hackathon",
+  "competition",
+  "seminar",
+  "bootcamp",
+  "internship",
+  "certification",
+  "other",
+]
 
 export interface Submission {
   id: string
   studentAddress: string
   courseName: string
+  credentialType: CredentialType
   instituteId: string
   instituteName: string
   cid: string
@@ -68,6 +100,7 @@ export interface RecentMintActivity {
   id: string
   tokenId: string | null
   courseName: string
+  credentialType: CredentialType
   instituteName: string
   studentAddress: string
   verifierAddress: string | null
@@ -89,6 +122,7 @@ export interface AnalyticsOverview {
 
 export interface InstituteProfileCourse {
   courseName: string
+  credentialType: CredentialType
   mintedCount: number
   totalEduMinted: number
 }
@@ -114,6 +148,7 @@ export interface VerificationRecord {
   issuedAt: string
   cid: string
   courseName: string
+  credentialType: CredentialType
   instituteName: string
   eduAmount: number | null
   txHash: string | null
@@ -176,6 +211,7 @@ export interface PlatformHealth {
 export interface UploadSubmissionInput {
   certificate: File
   courseName: string
+  credentialType: CredentialType
   instituteId: string
 }
 

@@ -6,7 +6,11 @@ import { authenticate, type AuthRequest } from "../middleware/authMiddleware"
 import { sendError, sendSuccess, handleServerError } from "../lib/api"
 import { createAuditTrailEvent, toAuditTrailResponse } from "../lib/audit"
 import { uploadToIPFS } from "../services/ipfs"
-import { isNonEmptyString, isValidObjectId } from "../lib/validation"
+import {
+  isCredentialType,
+  isNonEmptyString,
+  isValidObjectId,
+} from "../lib/validation"
 import { InstituteModel } from "../models/Institute"
 import { CertificateSubmissionModel } from "../models/CertificateSubmission"
 
@@ -68,7 +72,7 @@ router.post("/", authenticate, async (req: AuthRequest, res) => {
         res,
         400,
         "INVALID_FILE",
-        "Certificate must be a PDF or image file"
+        "Credential evidence must be a PDF or image file"
       )
     }
 
@@ -80,8 +84,9 @@ router.post("/", authenticate, async (req: AuthRequest, res) => {
       return sendError(res, 401, "UNAUTHORIZED", "You must be signed in")
     }
 
-    const { courseName, instituteId } = req.body as {
+    const { courseName, credentialType, instituteId } = req.body as {
       courseName?: string
+      credentialType?: string
       instituteId?: string
     }
 
@@ -90,7 +95,7 @@ router.post("/", authenticate, async (req: AuthRequest, res) => {
         res,
         400,
         "VALIDATION_ERROR",
-        "A certificate file is required"
+        "A credential evidence file is required"
       )
     }
 
@@ -99,14 +104,28 @@ router.post("/", authenticate, async (req: AuthRequest, res) => {
         res,
         400,
         "VALIDATION_ERROR",
-        "Course name and institute are required",
+        "Credential title and institute are required",
         {
           ...(isNonEmptyString(courseName)
             ? {}
-            : { courseName: "Course name is required" }),
+            : { courseName: "Credential title is required" }),
           ...(isNonEmptyString(instituteId)
             ? {}
             : { instituteId: "Institute is required" }),
+        }
+      )
+    }
+
+    const normalizedCredentialType = credentialType ?? "course"
+
+    if (!isCredentialType(normalizedCredentialType)) {
+      return sendError(
+        res,
+        400,
+        "VALIDATION_ERROR",
+        "Credential type is invalid",
+        {
+          credentialType: "Select a valid credential type",
         }
       )
     }
@@ -136,6 +155,7 @@ router.post("/", authenticate, async (req: AuthRequest, res) => {
     const submission = await CertificateSubmissionModel.create({
       studentAddress: req.user.address,
       courseName: courseName.trim(),
+      credentialType: normalizedCredentialType,
       instituteId: institute._id,
       instituteName: institute.name,
       cid,
@@ -147,10 +167,11 @@ router.post("/", authenticate, async (req: AuthRequest, res) => {
           type: "submission_created",
           title: "Submission created",
           description:
-            "Student uploaded the certificate and submitted it for review.",
+            "Student uploaded credential evidence and submitted it for review.",
           actorAddress: req.user.address,
           metadata: {
             cid,
+            credentialType: normalizedCredentialType,
             fileName: req.file.originalname,
             instituteName: institute.name,
           },
@@ -165,6 +186,7 @@ router.post("/", authenticate, async (req: AuthRequest, res) => {
           id: submission.id,
           studentAddress: submission.studentAddress,
           courseName: submission.courseName,
+          credentialType: submission.credentialType,
           instituteId: String(submission.instituteId),
           instituteName: submission.instituteName,
           cid: submission.cid,

@@ -6,7 +6,7 @@ Decentralized Academic Credential System for issuing verifiable academic certifi
 
 Implemented in this codebase:
 - Wallet sign-in with backend challenge/verify JWT auth
-- Student drag-and-drop certificate upload to Pinata IPFS
+- Student drag-and-drop academic credential submission to Pinata IPFS
 - MongoDB-backed submission lifecycle for `pending_review`, `rejected`, and `minted`
 - Admin review console with approve/mint and reject flows
 - Public certificate verification page by `tokenId` with QR sharing
@@ -31,13 +31,13 @@ Still intentionally out of scope for this version:
 
 System roles:
 - MongoDB stores institute data and certificate workflow state
-- IPFS stores uploaded certificate files
+- IPFS stores uploaded credential evidence files
 - Hardhat local chain stores PoCT ownership, verifier, timestamp, and EDU rewards
 
 ## Core Flow
 
 1. Student connects MetaMask and signs in.
-2. Student drags a certificate file into `/upload`, selects a college, and submits.
+2. Student drags a credential evidence file into `/upload`, selects a college, chooses a credential type, and submits.
 3. Backend uploads the file to Pinata IPFS and stores a `pending_review` submission in MongoDB.
 4. Admin opens `/admin`, reviews the pending queue, and approves with an EDU amount or rejects with a note.
 5. Backend mints a PoCT NFT plus EDU reward through `MintController`, parses the emitted event, and stores `tokenId` and `txHash`.
@@ -114,7 +114,7 @@ npm run dev
 Recommended submission demo sequence:
 
 1. Show `/upload` and sign in with a student wallet.
-2. Drag in a certificate file, choose a college, and submit.
+2. Drag in a credential evidence file, choose a college and credential type, and submit.
 3. Show the submission appear immediately in the student queue.
 4. Switch to the admin wallet and open `/admin`.
 5. Approve the pending submission with an EDU reward.

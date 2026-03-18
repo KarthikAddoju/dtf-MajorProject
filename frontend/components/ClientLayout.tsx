@@ -9,6 +9,7 @@ function ClientShell({
   children: React.ReactNode
 }) {
   const {
+    authFlowState,
     chainId,
     connectAndSignIn,
     connectedWalletAddress,
@@ -18,6 +19,7 @@ function ClientShell({
     isSupportedNetwork,
     logout,
     user,
+    walletNote,
     walletWarning,
   } = useAuth()
 
@@ -31,6 +33,8 @@ function ClientShell({
         isAuthenticated={isAuthenticated}
         isSupportedNetwork={isSupportedNetwork}
         isBusy={isAuthenticating}
+        authFlowState={authFlowState}
+        walletNote={walletNote}
         walletWarning={walletWarning}
         onConnectWallet={connectAndSignIn}
         onLogout={logout}

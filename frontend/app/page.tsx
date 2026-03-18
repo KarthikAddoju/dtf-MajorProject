@@ -4,14 +4,19 @@ import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import { PageLayout } from "@/components/PageLayout"
 import { FeatureCard } from "@/components/FeatureCard"
+import { StatusBanner } from "@/components/StatusBanner"
 import { useAuth } from "@/components/AuthProvider"
 import {
   fetchAnalyticsOverview,
   fetchPlatformHealth,
   isAbortError,
 } from "@/lib/api"
-import { formatDateTime, truncateValue } from "@/lib/formatting"
-import { getWalletNetworkLabel } from "@/lib/wallet"
+import {
+  formatCredentialTypeLabel,
+  formatDateTime,
+  truncateValue,
+} from "@/lib/formatting"
+import { getWalletNetworkLabel, getWalletSignInLabel } from "@/lib/wallet"
 import type { AnalyticsOverview, PlatformHealth } from "@/lib/types"
 
 function getStatusStyles(status: string) {
@@ -29,6 +34,7 @@ function getStatusStyles(status: string) {
 
 export default function HomePage() {
   const {
+    authFlowState,
     chainId,
     connectAndSignIn,
     connectedWalletAddress,
@@ -38,6 +44,7 @@ export default function HomePage() {
     isReady,
     isSupportedNetwork,
     user,
+    walletNote,
     walletWarning,
   } = useAuth()
   const [analyticsOverview, setAnalyticsOverview] = useState<AnalyticsOverview | null>(
@@ -237,12 +244,23 @@ export default function HomePage() {
           ? user?.role === "admin"
             ? "Admin authenticated"
             : "Student authenticated"
-          : isReady
-            ? "Awaiting sign-in"
-            : "Restoring session",
+          : authFlowState === "awaiting_signature"
+            ? "Awaiting signature"
+            : authFlowState === "connecting_wallet"
+              ? "Connecting wallet"
+              : authFlowState === "wallet_connected"
+                ? "Wallet connected"
+                : isReady
+                  ? "Awaiting sign-in"
+                  : "Restoring session",
         tone: isAuthenticated
           ? "border-[#0f766e]/30 bg-[#0f766e]/12 text-[#c9f0e7]"
-          : "border-[#3a3020]/70 bg-black/20 text-[#d3cdc1]",
+          : authFlowState === "awaiting_signature" ||
+              authFlowState === "connecting_wallet"
+            ? "border-[#b8892d]/30 bg-[#b8892d]/12 text-[#f3d9a2]"
+            : connectedWalletAddress
+              ? "border-[#8bbbd5]/30 bg-[#8bbbd5]/12 text-[#d8ebf5]"
+              : "border-[#3a3020]/70 bg-black/20 text-[#d3cdc1]",
       },
     ],
     [
@@ -251,13 +269,14 @@ export default function HomePage() {
       isAuthenticated,
       isReady,
       isSupportedNetwork,
+      authFlowState,
       networkLabel,
       user?.role,
     ]
   )
   const demoChecklist = useMemo(
     () => [
-      "Student signs in and uploads a certificate to IPFS-backed storage.",
+      "Student signs in and submits academic credential evidence into IPFS-backed storage.",
       "Admin reviews the evidence, adds a note, and mints PoCT plus EDU.",
       "Public verifier opens the token-backed record and scans the QR link.",
       "Student dashboard and college index reflect the minted outcome live.",
@@ -269,7 +288,7 @@ export default function HomePage() {
   return (
     <PageLayout>
       <section className="space-y-8">
-        <div className="grid gap-8 xl:grid-cols-[1.08fr_0.92fr]">
+        <div className="grid gap-8 xl:grid-cols-[1.08fr_0.92fr] xl:items-start">
           <div className="brand-panel-light px-8 py-10 sm:px-10 lg:px-12">
             <div className="relative">
               <div className="brand-kicker">Credential Operating System</div>
@@ -301,7 +320,10 @@ export default function HomePage() {
                     disabled={isAuthenticating}
                     className="brand-button-primary px-6 py-4 text-base disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {isAuthenticating ? "Connecting..." : "Connect And Sign In"}
+                    {getWalletSignInLabel(
+                      authFlowState,
+                      Boolean(connectedWalletAddress)
+                    )}
                   </button>
                 )}
                 <Link
@@ -331,7 +353,7 @@ export default function HomePage() {
                 ))}
               </div>
 
-              <div className="mt-10 grid gap-5 lg:grid-cols-[1.05fr_0.95fr]">
+              <div className="mt-10 grid gap-5 lg:grid-cols-[1.05fr_0.95fr] lg:items-start">
                 <div className="rounded-[28px_14px_28px_14px] border border-[#101828]/12 bg-[rgba(255,255,255,0.82)] p-6">
                   <div className="brand-chip-light">Why It Lands Well</div>
                   <div className="mt-5 space-y-4 text-[#344255]">
@@ -488,7 +510,12 @@ export default function HomePage() {
                       disabled={isAuthenticating}
                       className="brand-button-primary px-5 py-3 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      {isAuthenticating ? "Connecting..." : recommendedAction.label}
+                      {isAuthenticating
+                        ? getWalletSignInLabel(
+                            authFlowState,
+                            Boolean(connectedWalletAddress)
+                          )
+                        : recommendedAction.label}
                     </button>
                   ) : (
                     <Link
@@ -500,16 +527,28 @@ export default function HomePage() {
                   )}
                 </div>
                 {walletWarning ? (
-                  <div className="mt-4 rounded-[20px] border border-[#f0c57f]/18 bg-[#f0c57f]/10 px-4 py-3 text-sm text-[#fde4b8]">
-                    {walletWarning}
-                  </div>
+                  <StatusBanner
+                    className="mt-4"
+                    compact
+                    tone="warning"
+                    title="Wallet Attention"
+                    message={walletWarning}
+                  />
+                ) : walletNote ? (
+                  <StatusBanner
+                    className="mt-4"
+                    compact
+                    tone="neutral"
+                    title="Session Note"
+                    message={walletNote}
+                  />
                 ) : null}
               </div>
             </div>
           </div>
         </div>
 
-        <div className="grid gap-8 xl:grid-cols-[0.92fr_1.08fr]">
+        <div className="grid gap-8 xl:grid-cols-[0.92fr_1.08fr] xl:items-start">
           <div className="brand-panel p-8">
             <div className="text-[11px] uppercase tracking-[0.3em] text-[#f5c88a]">
               Demo Runbook
@@ -586,7 +625,7 @@ export default function HomePage() {
           </div>
         </div>
 
-        <div className="grid gap-8 xl:grid-cols-[1.05fr_0.95fr]">
+        <div className="grid gap-8 xl:grid-cols-[1.05fr_0.95fr] xl:items-start">
           <div className="space-y-5">
             <div>
               <div className="text-[11px] uppercase tracking-[0.3em] text-[#8bbbd5]">
@@ -609,14 +648,19 @@ export default function HomePage() {
                     key={activity.id}
                     className="brand-panel grid gap-4 p-6 sm:grid-cols-[1fr_auto]"
                   >
-                    <div>
+                    <div className="min-w-0">
                       <div className="text-[11px] uppercase tracking-[0.26em] text-[#8bbbd5]">
                         {activity.tokenId ? `Token #${activity.tokenId}` : "Minted Record"}
                       </div>
-                      <h3 className="display-serif mt-2 text-[1.9rem] font-semibold text-[#f7efe3]">
+                      <h3 className="display-serif mt-2 text-[1.9rem] font-semibold text-[#f7efe3] [overflow-wrap:anywhere]">
                         {activity.courseName}
                       </h3>
-                      <div className="mt-1 text-sm text-[#b9c3d4]">{activity.instituteName}</div>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <div className="text-sm text-[#b9c3d4]">{activity.instituteName}</div>
+                        <div className="rounded-full border border-[#b8892d]/20 bg-[#b8892d]/10 px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-[#f3d9a2]">
+                          {formatCredentialTypeLabel(activity.credentialType)}
+                        </div>
+                      </div>
 
                       <div className="mt-5 grid gap-3 text-sm text-[#d8e0ec] sm:grid-cols-2">
                         <div className="rounded-[18px_10px_18px_10px] border border-[#eedfce]/10 bg-[rgba(255,255,255,0.03)] p-3">
@@ -662,7 +706,7 @@ export default function HomePage() {
                   Activity feed is primed for the next mint
                 </h3>
                 <p className="mt-3 text-[#c8d0de]">
-                  Once a certificate is approved and minted, it will appear here
+                  Once a credential is approved and minted, it will appear here
                   with its token-backed verification link.
                 </p>
               </div>

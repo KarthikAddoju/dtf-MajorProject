@@ -291,6 +291,7 @@ export async function uploadCertificate(
   const formData = new FormData()
   formData.append("certificate", input.certificate)
   formData.append("courseName", input.courseName)
+  formData.append("credentialType", input.credentialType)
   formData.append("instituteId", input.instituteId)
 
   return new Promise<UploadSubmissionResult>((resolve, reject) => {

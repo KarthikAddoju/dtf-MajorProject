@@ -149,6 +149,7 @@ router.get("/overview", async (_req, res) => {
           id: String(submission._id),
           tokenId: submission.tokenId ?? null,
           courseName: submission.courseName,
+          credentialType: submission.credentialType ?? "course",
           instituteName: submission.instituteName,
           studentAddress: submission.studentAddress,
           verifierAddress: submission.verifierAddress ?? null,

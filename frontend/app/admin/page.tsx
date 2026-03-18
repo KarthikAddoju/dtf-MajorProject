@@ -2,12 +2,13 @@
 
 import Image from "next/image"
 import { type FormEvent, useEffect, useMemo, useState } from "react"
-import { toast } from "sonner"
 import { AuditTrailList } from "@/components/AuditTrailList"
 import { DashboardCard } from "@/components/DashboardCard"
+import { EmptyStatePanel } from "@/components/EmptyStatePanel"
 import { MetricCard } from "@/components/MetricCard"
 import { PageLayout } from "@/components/PageLayout"
 import { RoleBadge } from "@/components/RoleBadge"
+import { StatusBanner } from "@/components/StatusBanner"
 import { WalletBadge } from "@/components/WalletBadge"
 import { useAuth } from "@/components/AuthProvider"
 import {
@@ -20,7 +21,11 @@ import {
   rejectSubmission,
   updateInstitute,
 } from "@/lib/api"
-import { formatDateTime, truncateValue } from "@/lib/formatting"
+import {
+  formatCredentialTypeLabel,
+  formatDateTime,
+  truncateValue,
+} from "@/lib/formatting"
 import type { Institute, Submission } from "@/lib/types"
 
 interface ReviewDraft {
@@ -28,14 +33,55 @@ interface ReviewDraft {
   reviewNote: string
 }
 
+interface InstituteFieldErrors {
+  name?: string
+  shortCode?: string
+}
+
+function getInstituteFieldErrors(
+  name: string,
+  shortCode: string
+): InstituteFieldErrors {
+  const errors: InstituteFieldErrors = {}
+
+  if (!name.trim()) {
+    errors.name = "Enter the institute name before creating it."
+  }
+
+  if (!shortCode.trim()) {
+    errors.shortCode = "Enter a short code such as IITH or BITS."
+  } else if (shortCode.trim().length < 2 || shortCode.trim().length > 10) {
+    errors.shortCode = "Use a short code between 2 and 10 characters."
+  }
+
+  return errors
+}
+
+function getEduAmountError(value: string) {
+  const parsedValue = Number(value)
+
+  if (!value.trim()) {
+    return "Enter the EDU reward that should be minted with this credential."
+  }
+
+  if (!Number.isFinite(parsedValue) || parsedValue <= 0) {
+    return "Use a positive EDU amount."
+  }
+
+  return undefined
+}
+
 export default function AdminPage() {
   const {
+    authFlowState,
     connectAndSignIn,
+    connectedWalletAddress,
     isAuthenticated,
     isAuthenticating,
     isReady,
     token,
     user,
+    walletNote,
   } = useAuth()
 
   const [pendingSubmissions, setPendingSubmissions] = useState<Submission[]>([])
@@ -53,6 +99,19 @@ export default function AdminPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedSubmissionId, setSelectedSubmissionId] = useState<string | null>(null)
   const [refreshNonce, setRefreshNonce] = useState(0)
+  const [reviewFieldErrors, setReviewFieldErrors] = useState<
+    Record<string, { eduAmount?: string }>
+  >({})
+  const [consoleStatus, setConsoleStatus] = useState<{
+    tone: "info" | "success" | "error"
+    title: string
+    message: string
+  } | null>(null)
+  const [instituteSubmitAttempted, setInstituteSubmitAttempted] = useState(false)
+  const [touchedInstituteFields, setTouchedInstituteFields] = useState({
+    name: false,
+    shortCode: false,
+  })
 
   useEffect(() => {
     if (!pendingSubmissions.length) {
@@ -128,7 +187,11 @@ export default function AdminPage() {
 
         const message =
           error instanceof Error ? error.message : "Could not load admin data"
-        toast.error(message)
+        setConsoleStatus({
+          tone: "error",
+          title: "Admin console unavailable",
+          message,
+        })
       } finally {
         if (!controller.signal.aborted) {
           setIsLoading(false)
@@ -149,14 +212,30 @@ export default function AdminPage() {
     const authToken = token
 
     const draft = reviewDrafts[submission.id]
-    const parsedEduAmount = Number(draft?.eduAmount ?? "")
+    const eduAmountError = getEduAmountError(draft?.eduAmount ?? "")
 
-    if (!Number.isFinite(parsedEduAmount) || parsedEduAmount <= 0) {
-      toast.error("Enter a valid positive EDU amount before approving.")
+    setReviewFieldErrors((currentErrors) => ({
+      ...currentErrors,
+      [submission.id]: {
+        ...currentErrors[submission.id],
+        eduAmount: eduAmountError,
+      },
+    }))
+
+    if (eduAmountError) {
+      setSelectedSubmissionId(submission.id)
       return
     }
 
+    const parsedEduAmount = Number(draft?.eduAmount ?? "")
+
     setProcessingSubmissionId(submission.id)
+    setConsoleStatus({
+      tone: "info",
+      title: "Mint transaction in progress",
+      message:
+        "The verifier is minting the credential, rewarding EDU, and waiting for confirmation from the local blockchain.",
+    })
 
     try {
       const response = await mintSubmission(authToken, {
@@ -165,14 +244,20 @@ export default function AdminPage() {
         reviewNote: draft?.reviewNote.trim() || undefined,
       })
 
-      toast.success(
-        `Minted token #${response.tokenId}, rewarded ${response.eduAmount} EDU, and enabled VC/Open Badge exports automatically.`
-      )
+      setConsoleStatus({
+        tone: "success",
+        title: "Credential minted",
+        message: `Token #${response.tokenId} minted successfully and ${response.eduAmount} EDU was rewarded. VC and Open Badge exports are now live automatically.`,
+      })
       setRefreshNonce((value) => value + 1)
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Minting failed unexpectedly"
-      toast.error(message)
+      setConsoleStatus({
+        tone: "error",
+        title: "Mint failed",
+        message,
+      })
     } finally {
       setProcessingSubmissionId(null)
     }
@@ -186,6 +271,12 @@ export default function AdminPage() {
     const authToken = token
 
     setProcessingSubmissionId(submission.id)
+    setConsoleStatus({
+      tone: "info",
+      title: "Applying review decision",
+      message:
+        "DACS is recording the rejection note and updating the student lifecycle timeline.",
+    })
 
     try {
       const draft = reviewDrafts[submission.id]
@@ -194,12 +285,21 @@ export default function AdminPage() {
         submission.id,
         draft?.reviewNote.trim() || undefined
       )
-      toast.success("Submission rejected and removed from the pending queue.")
+      setConsoleStatus({
+        tone: "success",
+        title: "Submission rejected",
+        message:
+          "The credential was removed from the pending queue and the student can now see the reviewer outcome.",
+      })
       setRefreshNonce((value) => value + 1)
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Could not reject submission"
-      toast.error(message)
+      setConsoleStatus({
+        tone: "error",
+        title: "Rejection could not be saved",
+        message,
+      })
     } finally {
       setProcessingSubmissionId(null)
     }
@@ -214,12 +314,23 @@ export default function AdminPage() {
 
     const authToken = token
 
-    if (!newInstituteName.trim() || !newInstituteShortCode.trim()) {
-      toast.error("Provide both the institute name and short code.")
+    setInstituteSubmitAttempted(true)
+    setTouchedInstituteFields({
+      name: true,
+      shortCode: true,
+    })
+
+    if (Object.keys(instituteFieldErrors).length > 0) {
       return
     }
 
     setIsCreatingInstitute(true)
+    setConsoleStatus({
+      tone: "info",
+      title: "Creating institute",
+      message:
+        "The new institute is being added to the upload catalog and public index.",
+    })
 
     try {
       await createInstitute(authToken, {
@@ -228,12 +339,21 @@ export default function AdminPage() {
       })
       setNewInstituteName("")
       setNewInstituteShortCode("")
-      toast.success("Institute created and added to the upload catalog.")
+      setConsoleStatus({
+        tone: "success",
+        title: "Institute added",
+        message:
+          "The institute is now available in upload forms and the public college index.",
+      })
       setRefreshNonce((value) => value + 1)
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Could not create institute"
-      toast.error(message)
+      setConsoleStatus({
+        tone: "error",
+        title: "Institute could not be created",
+        message,
+      })
     } finally {
       setIsCreatingInstitute(false)
     }
@@ -247,21 +367,33 @@ export default function AdminPage() {
     const authToken = token
 
     setTogglingInstituteId(institute.id)
+    setConsoleStatus({
+      tone: "info",
+      title: institute.isActive ? "Deactivating institute" : "Reactivating institute",
+      message:
+        "The institute availability is being updated across new submissions and catalog views.",
+    })
 
     try {
       await updateInstitute(authToken, institute.id, {
         isActive: !institute.isActive,
       })
-      toast.success(
-        institute.isActive
-          ? "Institute deactivated from new uploads."
-          : "Institute reactivated for new uploads."
-      )
+      setConsoleStatus({
+        tone: "success",
+        title: institute.isActive ? "Institute deactivated" : "Institute reactivated",
+        message: institute.isActive
+          ? "New submissions can no longer target this institute until it is re-enabled."
+          : "The institute is once again available for new student submissions.",
+      })
       setRefreshNonce((value) => value + 1)
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Could not update institute"
-      toast.error(message)
+      setConsoleStatus({
+        tone: "error",
+        title: "Institute update failed",
+        message,
+      })
     } finally {
       setTogglingInstituteId(null)
     }
@@ -290,6 +422,7 @@ export default function AdminPage() {
     return pendingSubmissions.filter((submission) =>
       [
         submission.courseName,
+        submission.credentialType,
         submission.instituteName,
         submission.studentAddress,
         submission.fileName,
@@ -306,6 +439,117 @@ export default function AdminPage() {
     filteredPendingSubmissions[0] ??
     pendingSubmissions[0] ??
     null
+  const instituteFieldErrors = useMemo(
+    () => getInstituteFieldErrors(newInstituteName, newInstituteShortCode),
+    [newInstituteName, newInstituteShortCode]
+  )
+  const visibleInstituteFieldErrors = useMemo(
+    () => ({
+      name:
+        instituteSubmitAttempted || touchedInstituteFields.name
+          ? instituteFieldErrors.name
+          : undefined,
+      shortCode:
+        instituteSubmitAttempted || touchedInstituteFields.shortCode
+          ? instituteFieldErrors.shortCode
+          : undefined,
+    }),
+    [instituteFieldErrors, instituteSubmitAttempted, touchedInstituteFields]
+  )
+  const instituteSummaryItems = useMemo(
+    () =>
+      [visibleInstituteFieldErrors.name, visibleInstituteFieldErrors.shortCode].filter(
+        (message): message is string => Boolean(message)
+      ),
+    [visibleInstituteFieldErrors]
+  )
+  const selectedSubmissionIndex = selectedSubmission
+    ? filteredPendingSubmissions.findIndex(
+        (submission) => submission.id === selectedSubmission.id
+      )
+    : -1
+  const selectedDraft = selectedSubmission
+    ? reviewDrafts[selectedSubmission.id] ?? {
+        eduAmount: selectedSubmission.eduAmount?.toString() ?? "100",
+        reviewNote: selectedSubmission.reviewNote ?? "",
+      }
+    : null
+  const canSelectPrevious = selectedSubmissionIndex > 0
+  const canSelectNext =
+    selectedSubmissionIndex >= 0 &&
+    selectedSubmissionIndex < filteredPendingSubmissions.length - 1
+  const selectedSubmissionQueueLabel =
+    selectedSubmissionIndex >= 0
+      ? `Focused item ${selectedSubmissionIndex + 1} of ${filteredPendingSubmissions.length}`
+      : "No queue item selected"
+
+  function selectSubmissionByOffset(offset: number) {
+    if (selectedSubmissionIndex < 0) {
+      return
+    }
+
+    const nextSubmission = filteredPendingSubmissions[selectedSubmissionIndex + offset]
+
+    if (!nextSubmission) {
+      return
+    }
+
+    setSelectedSubmissionId(nextSubmission.id)
+  }
+
+  useEffect(() => {
+    if (!selectedSubmission || user?.role !== "admin") {
+      return
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target
+
+      if (
+        target instanceof HTMLElement &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable)
+      ) {
+        return
+      }
+
+      if (event.key === "[") {
+        event.preventDefault()
+        const previousSubmission =
+          selectedSubmissionIndex > 0
+            ? filteredPendingSubmissions[selectedSubmissionIndex - 1]
+            : null
+
+        if (previousSubmission) {
+          setSelectedSubmissionId(previousSubmission.id)
+        }
+      }
+
+      if (event.key === "]") {
+        event.preventDefault()
+        const nextSubmission =
+          selectedSubmissionIndex >= 0 &&
+          selectedSubmissionIndex < filteredPendingSubmissions.length - 1
+            ? filteredPendingSubmissions[selectedSubmissionIndex + 1]
+            : null
+
+        if (nextSubmission) {
+          setSelectedSubmissionId(nextSubmission.id)
+        }
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [
+    filteredPendingSubmissions,
+    selectedSubmission,
+    selectedSubmissionIndex,
+    user?.role,
+  ])
 
   return (
     <PageLayout>
@@ -356,9 +600,25 @@ export default function AdminPage() {
               disabled={isAuthenticating}
               className="brand-button-primary px-6 py-3 text-sm disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {isAuthenticating ? "Connecting..." : "Connect Admin Wallet"}
+              {authFlowState === "awaiting_signature"
+                ? "Awaiting Signature..."
+                : authFlowState === "connecting_wallet"
+                  ? "Connecting Wallet..."
+                  : authFlowState === "wallet_connected" ||
+                      Boolean(connectedWalletAddress)
+                    ? "Complete Admin Sign-In"
+                    : "Connect Admin Wallet"}
             </button>
           </div>
+          {walletNote ? (
+            <StatusBanner
+              className="mt-5"
+              compact
+              tone="neutral"
+              title="Session Note"
+              message={walletNote}
+            />
+          ) : null}
         </DashboardCard>
       ) : null}
 
@@ -370,7 +630,7 @@ export default function AdminPage() {
             </h2>
             <p className="mx-auto max-w-2xl text-slate-300">
               Your current wallet is signed in as a student account. Switch to the
-              configured admin wallet to review pending certificates.
+              configured admin wallet to review pending credentials.
             </p>
           </div>
         </DashboardCard>
@@ -379,9 +639,19 @@ export default function AdminPage() {
       {isReady && isAuthenticated && user?.role === "admin" ? (
         <>
           <div className="mb-8 rounded-[24px_12px_24px_12px] border border-[#77997f]/24 bg-[#77997f]/10 px-5 py-4 text-sm text-[#d7ebd8]">
-            VC and Open Badge exports are generated automatically after mint. The
-            admin flow stays the same: review, approve or reject, and mint.
+            The admin flow stays simple: inspect the evidence, add a note if
+            needed, approve or reject, and mint. Public proof artifacts publish
+            automatically after approval.
           </div>
+
+          {consoleStatus ? (
+            <StatusBanner
+              className="mb-8"
+              tone={consoleStatus.tone}
+              title={consoleStatus.title}
+              message={consoleStatus.message}
+            />
+          ) : null}
 
           <div className="mb-10 grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
             <MetricCard
@@ -410,7 +680,7 @@ export default function AdminPage() {
             />
           </div>
 
-          <div className="grid grid-cols-1 gap-8 xl:grid-cols-[1.3fr_0.7fr]">
+          <div className="grid grid-cols-1 gap-8 xl:grid-cols-[1.3fr_0.7fr] xl:items-start">
             <DashboardCard title="Pending Submission Queue">
               <div className="mb-6 grid grid-cols-1 gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4 md:grid-cols-[1fr_auto]">
                 <div>
@@ -425,9 +695,23 @@ export default function AdminPage() {
                     type="text"
                     value={searchQuery}
                     onChange={(event) => setSearchQuery(event.target.value)}
-                    placeholder="Search by course, institute, student wallet, file name, or CID"
+                    placeholder="Search by credential title, type, institute, student wallet, file name, or CID"
                     className="w-full rounded-[18px] border border-[#eedfce]/12 bg-[rgba(255,255,255,0.04)] px-4 py-3 text-white placeholder:text-[#8ea0b8] focus:border-[#d25b36]/45 focus:outline-none"
                   />
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-xs text-slate-500">
+                      Search updates live across title, institute, wallet, CID, and file name.
+                    </p>
+                    {searchQuery.trim() ? (
+                      <button
+                        type="button"
+                        onClick={() => setSearchQuery("")}
+                        className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium uppercase tracking-[0.16em] text-slate-200 transition hover:bg-white/10"
+                      >
+                        Clear Search
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
                 <div className="flex flex-col justify-end">
                   <div className="rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-slate-300">
@@ -436,30 +720,38 @@ export default function AdminPage() {
                 </div>
               </div>
 
+              <div className="mb-6 rounded-2xl border border-[#8bbbd5]/18 bg-[#8bbbd5]/10 p-4 text-sm text-[#d6edf8]">
+                Reviewer shortcuts stay active while the workspace is open. Use{" "}
+                <span className="font-semibold text-white">[</span> and{" "}
+                <span className="font-semibold text-white">]</span> to move between
+                pending credentials without losing the preview context.
+              </div>
+
               {isLoading ? (
                 <div className="py-12 text-center text-slate-300">
                   Loading review queue...
                 </div>
               ) : pendingSubmissions.length === 0 ? (
-                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center">
-                  <h3 className="mb-2 text-xl font-semibold text-white">
-                    Queue clear
-                  </h3>
-                  <p className="text-slate-400">
-                    There are no pending submissions right now. New uploads will
-                    appear here automatically.
-                  </p>
-                </div>
+                <EmptyStatePanel
+                  eyebrow="Queue clear"
+                  title="No pending credentials to review"
+                  description="New student submissions will appear here automatically as soon as they enter the review queue."
+                />
               ) : filteredPendingSubmissions.length === 0 ? (
-                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center">
-                  <h3 className="mb-2 text-xl font-semibold text-white">
-                    No queue matches that search
-                  </h3>
-                  <p className="text-slate-400">
-                    Try a broader search term to bring the submission queue back
-                    into view.
-                  </p>
-                </div>
+                <EmptyStatePanel
+                  eyebrow="Search filter"
+                  title="No queue matches that search"
+                  description="Try a broader term or reset the filter to bring the active review queue back into view."
+                  action={
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery("")}
+                      className="brand-button-secondary px-5 py-3 text-sm"
+                    >
+                      Clear Search
+                    </button>
+                  }
+                />
               ) : (
                 <div className="space-y-5">
                   {filteredPendingSubmissions.map((submission) => {
@@ -480,13 +772,18 @@ export default function AdminPage() {
                         }`}
                       >
                         <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                          <div>
-                            <h3 className="text-lg font-semibold text-white">
+                          <div className="min-w-0">
+                            <h3 className="text-lg font-semibold text-white [overflow-wrap:anywhere]">
                               {submission.courseName}
                             </h3>
-                            <p className="text-sm text-slate-400">
-                              {submission.instituteName}
-                            </p>
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                              <p className="text-sm text-slate-400">
+                                {submission.instituteName}
+                              </p>
+                              <div className="rounded-full border border-[#b8892d]/20 bg-[#b8892d]/10 px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-[#f3d9a2]">
+                                {formatCredentialTypeLabel(submission.credentialType)}
+                              </div>
+                            </div>
                           </div>
                           <div className="rounded-full border border-[#f0c57f]/24 bg-[#f0c57f]/10 px-3 py-1 text-xs font-medium text-[#fde4b8]">
                             Pending Review
@@ -539,16 +836,59 @@ export default function AdminPage() {
                               step="1"
                               value={draft.eduAmount}
                               onChange={(event) =>
-                                setReviewDrafts((currentDrafts) => ({
-                                  ...currentDrafts,
+                                {
+                                  const nextValue = event.target.value
+                                  setReviewDrafts((currentDrafts) => ({
+                                    ...currentDrafts,
+                                    [submission.id]: {
+                                      ...draft,
+                                      eduAmount: nextValue,
+                                    },
+                                  }))
+                                  setReviewFieldErrors((currentErrors) => ({
+                                    ...currentErrors,
+                                    [submission.id]: {
+                                      ...currentErrors[submission.id],
+                                      eduAmount: currentErrors[submission.id]?.eduAmount
+                                        ? getEduAmountError(nextValue)
+                                        : undefined,
+                                    },
+                                  }))
+                                }
+                              }
+                              onBlur={() =>
+                                setReviewFieldErrors((currentErrors) => ({
+                                  ...currentErrors,
                                   [submission.id]: {
-                                    ...draft,
-                                    eduAmount: event.target.value,
+                                    ...currentErrors[submission.id],
+                                    eduAmount: getEduAmountError(draft.eduAmount),
                                   },
                                 }))
                               }
-                              className="w-full rounded-[18px] border border-[#eedfce]/12 bg-[rgba(255,255,255,0.04)] px-4 py-3 text-white focus:border-[#d25b36]/45 focus:outline-none"
+                              aria-invalid={Boolean(reviewFieldErrors[submission.id]?.eduAmount)}
+                              aria-describedby={`eduAmountHint-${submission.id} eduAmountError-${submission.id}`}
+                              className={`w-full rounded-[18px] border px-4 py-3 text-white focus:border-[#d25b36]/45 focus:outline-none ${
+                                reviewFieldErrors[submission.id]?.eduAmount
+                                  ? "border-rose-500/35 bg-rose-500/10"
+                                  : "border-[#eedfce]/12 bg-[rgba(255,255,255,0.04)]"
+                              }`}
                             />
+                            <p
+                              id={`eduAmountHint-${submission.id}`}
+                              className="mt-2 text-sm text-slate-400"
+                            >
+                              Set the EDU reward that should be minted together with
+                              this approved credential.
+                            </p>
+                            {reviewFieldErrors[submission.id]?.eduAmount ? (
+                              <p
+                                id={`eduAmountError-${submission.id}`}
+                                className="mt-2 text-sm text-rose-300"
+                                role="alert"
+                              >
+                                {reviewFieldErrors[submission.id]?.eduAmount}
+                              </p>
+                            ) : null}
                           </div>
 
                           <div>
@@ -574,6 +914,10 @@ export default function AdminPage() {
                               placeholder="Add an approval note or rejection reason"
                               className="w-full rounded-[18px] border border-[#eedfce]/12 bg-[rgba(255,255,255,0.04)] px-4 py-3 text-white placeholder:text-[#8ea0b8] focus:border-[#d25b36]/45 focus:outline-none"
                             />
+                            <p className="mt-2 text-sm text-slate-400">
+                              Optional for approvals. Recommended for rejections so
+                              the student knows how to improve the submission.
+                            </p>
                           </div>
                         </div>
 
@@ -591,7 +935,7 @@ export default function AdminPage() {
                             rel="noreferrer"
                             className="rounded-lg border border-white/10 px-4 py-2 text-sm text-white transition hover:bg-white/10"
                           >
-                            Open IPFS File
+                            Open Evidence File
                           </a>
                           <button
                             type="button"
@@ -617,20 +961,60 @@ export default function AdminPage() {
               )}
             </DashboardCard>
 
-            <div className="space-y-8">
+            <div className="space-y-8 xl:sticky xl:top-28 xl:self-start">
               <DashboardCard title="Review Workspace">
                 {selectedSubmission ? (
                   <div className="space-y-5">
-                    <div>
-                      <div className="text-xs uppercase tracking-[0.3em] text-[#ffd7c8]">
-                        Active Review Focus
+                    <div className="rounded-2xl border border-[#ffd7c8]/14 bg-[#d25b36]/10 p-4">
+                      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0">
+                          <div className="text-xs uppercase tracking-[0.3em] text-[#ffd7c8]">
+                            Active Review Focus
+                          </div>
+                          <h3 className="mt-2 text-xl font-semibold text-white [overflow-wrap:anywhere]">
+                            {selectedSubmission.courseName}
+                          </h3>
+                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <p className="text-slate-300">
+                              {selectedSubmission.instituteName}
+                            </p>
+                            <div className="rounded-full border border-[#b8892d]/20 bg-[#b8892d]/10 px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-[#f3d9a2]">
+                              {formatCredentialTypeLabel(selectedSubmission.credentialType)}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs uppercase tracking-[0.2em] text-slate-200">
+                          {selectedSubmissionQueueLabel}
+                        </div>
                       </div>
-                      <h3 className="mt-2 text-xl font-semibold text-white">
-                        {selectedSubmission.courseName}
-                      </h3>
-                      <p className="text-slate-400">
-                        {selectedSubmission.instituteName}
-                      </p>
+
+                      <div className="mt-4 flex flex-wrap gap-3">
+                        <button
+                          type="button"
+                          onClick={() => selectSubmissionByOffset(-1)}
+                          disabled={!canSelectPrevious}
+                          className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Previous [
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => selectSubmissionByOffset(1)}
+                          disabled={!canSelectNext}
+                          className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Next ]
+                        </button>
+                        <a
+                          href={selectedSubmission.ipfsUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="rounded-full border border-[#8bbbd5]/24 bg-[#8bbbd5]/10 px-4 py-2 text-sm font-medium text-[#d6edf8] transition hover:bg-[#8bbbd5]/18"
+                        >
+                          Open Evidence
+                        </a>
+                      </div>
                     </div>
 
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -677,6 +1061,57 @@ export default function AdminPage() {
                       )}
                     </div>
 
+                    <div className="rounded-2xl border border-[#8bbbd5]/16 bg-[rgba(139,187,213,0.08)] p-4">
+                      <div className="mb-3 text-xs uppercase tracking-[0.24em] text-[#d6edf8]">
+                        Decision Snapshot
+                      </div>
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                          <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                            EDU Reward Draft
+                          </div>
+                          <div className="mt-2 text-white">
+                            {selectedDraft?.eduAmount?.trim()
+                              ? `${selectedDraft.eduAmount} EDU`
+                              : "Not set"}
+                          </div>
+                        </div>
+                        <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                          <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                            Reviewer Note
+                          </div>
+                          <div className="mt-2 text-white">
+                            {selectedDraft?.reviewNote.trim()
+                              ? "Ready to attach with the decision"
+                              : "Optional for approval, recommended for rejection"}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 flex flex-wrap gap-3">
+                        <button
+                          type="button"
+                          onClick={() => void handleReject(selectedSubmission)}
+                          disabled={processingSubmissionId === selectedSubmission.id}
+                          className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-2 text-sm font-medium text-rose-200 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {processingSubmissionId === selectedSubmission.id
+                            ? "Processing..."
+                            : "Reject From Workspace"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleApprove(selectedSubmission)}
+                          disabled={processingSubmissionId === selectedSubmission.id}
+                          className="brand-button-primary px-4 py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {processingSubmissionId === selectedSubmission.id
+                            ? "Minting..."
+                            : "Approve & Mint From Workspace"}
+                        </button>
+                      </div>
+                    </div>
+
                     <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-slate-300">
                       <div className="mb-2 text-xs uppercase tracking-[0.2em] text-slate-500">
                         Review Notes
@@ -684,7 +1119,7 @@ export default function AdminPage() {
                       <p>
                         Use the queue card on the left to assign the EDU reward, add
                         a reviewer note, and approve or reject while keeping the
-                        certificate preview open here.
+                        credential evidence preview open here.
                       </p>
                     </div>
 
@@ -700,14 +1135,40 @@ export default function AdminPage() {
                     </div>
                   </div>
                 ) : (
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 text-center text-slate-400">
-                    Select a pending submission to open the reviewer workspace.
-                  </div>
+                  <EmptyStatePanel
+                    eyebrow="Workspace idle"
+                    title="Select a pending credential"
+                    description="Choose a queue item to open the reviewer workspace, inspect the evidence preview, and take the mint or reject action."
+                    action={
+                      filteredPendingSubmissions.length > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setSelectedSubmissionId(filteredPendingSubmissions[0]?.id ?? null)
+                          }
+                          className="brand-button-secondary px-5 py-3 text-sm"
+                        >
+                          Open First Queue Item
+                        </button>
+                      ) : undefined
+                    }
+                  />
                 )}
               </DashboardCard>
 
               <DashboardCard title="Institute Management">
                 <form onSubmit={handleCreateInstitute} className="space-y-4">
+                  {instituteSubmitAttempted && instituteSummaryItems.length > 0 ? (
+                    <div className="brand-form-summary" role="alert">
+                      <div className="brand-form-summary-title">Check The Form</div>
+                      <ul className="brand-form-summary-list">
+                        {instituteSummaryItems.map((message) => (
+                          <li key={message}>{message}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+
                   <div>
                     <label
                       htmlFor="newInstituteName"
@@ -720,9 +1181,34 @@ export default function AdminPage() {
                       type="text"
                       value={newInstituteName}
                       onChange={(event) => setNewInstituteName(event.target.value)}
+                      onBlur={() =>
+                        setTouchedInstituteFields((current) => ({
+                          ...current,
+                          name: true,
+                        }))
+                      }
                       placeholder="International Institute of Technology"
-                      className="w-full rounded-[18px] border border-[#eedfce]/12 bg-[rgba(255,255,255,0.04)] px-4 py-3 text-white focus:border-[#d25b36]/45 focus:outline-none"
+                      className={`w-full rounded-[18px] border px-4 py-3 text-white focus:border-[#d25b36]/45 focus:outline-none ${
+                        visibleInstituteFieldErrors.name
+                          ? "border-rose-500/35 bg-rose-500/10"
+                          : "border-[#eedfce]/12 bg-[rgba(255,255,255,0.04)]"
+                      }`}
+                      aria-invalid={Boolean(visibleInstituteFieldErrors.name)}
+                      aria-describedby="newInstituteNameHint newInstituteNameError"
                     />
+                    <p id="newInstituteNameHint" className="mt-2 text-sm text-slate-400">
+                      Use the full public name that should appear in uploads,
+                      dashboards, and institute profile pages.
+                    </p>
+                    {visibleInstituteFieldErrors.name ? (
+                      <p
+                        id="newInstituteNameError"
+                        className="mt-2 text-sm text-rose-300"
+                        role="alert"
+                      >
+                        {visibleInstituteFieldErrors.name}
+                      </p>
+                    ) : null}
                   </div>
                   <div>
                     <label
@@ -736,9 +1222,37 @@ export default function AdminPage() {
                       type="text"
                       value={newInstituteShortCode}
                       onChange={(event) => setNewInstituteShortCode(event.target.value)}
+                      onBlur={() =>
+                        setTouchedInstituteFields((current) => ({
+                          ...current,
+                          shortCode: true,
+                        }))
+                      }
                       placeholder="IITX"
-                      className="w-full rounded-[18px] border border-[#eedfce]/12 bg-[rgba(255,255,255,0.04)] px-4 py-3 text-white focus:border-[#d25b36]/45 focus:outline-none"
+                      className={`w-full rounded-[18px] border px-4 py-3 text-white focus:border-[#d25b36]/45 focus:outline-none ${
+                        visibleInstituteFieldErrors.shortCode
+                          ? "border-rose-500/35 bg-rose-500/10"
+                          : "border-[#eedfce]/12 bg-[rgba(255,255,255,0.04)]"
+                      }`}
+                      aria-invalid={Boolean(visibleInstituteFieldErrors.shortCode)}
+                      aria-describedby="newInstituteShortCodeHint newInstituteShortCodeError"
                     />
+                    <p
+                      id="newInstituteShortCodeHint"
+                      className="mt-2 text-sm text-slate-400"
+                    >
+                      Keep it short and memorable. It is used in chips, search, and
+                      the institute index.
+                    </p>
+                    {visibleInstituteFieldErrors.shortCode ? (
+                      <p
+                        id="newInstituteShortCodeError"
+                        className="mt-2 text-sm text-rose-300"
+                        role="alert"
+                      >
+                        {visibleInstituteFieldErrors.shortCode}
+                      </p>
+                    ) : null}
                   </div>
                   <button
                     type="submit"
@@ -805,8 +1319,11 @@ export default function AdminPage() {
                             <div className="font-medium text-white">
                               {submission.courseName}
                             </div>
-                            <div className="text-sm text-slate-400">
-                              {submission.instituteName}
+                            <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-slate-400">
+                              <span>{submission.instituteName}</span>
+                              <span className="rounded-full border border-[#b8892d]/20 bg-[#b8892d]/10 px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-[#f3d9a2]">
+                                {formatCredentialTypeLabel(submission.credentialType)}
+                              </span>
                             </div>
                           </div>
                           <div

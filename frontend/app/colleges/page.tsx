@@ -11,14 +11,20 @@ import {
   XAxis,
   YAxis,
 } from "recharts"
+import { EmptyStatePanel } from "@/components/EmptyStatePanel"
 import { MetricCard } from "@/components/MetricCard"
 import { PageLayout } from "@/components/PageLayout"
+import { StatusBanner } from "@/components/StatusBanner"
 import {
   fetchAnalyticsOverview,
   fetchCollegeLeaderboard,
   isAbortError,
 } from "@/lib/api"
-import { formatDateTime, truncateValue } from "@/lib/formatting"
+import {
+  formatCredentialTypeLabel,
+  formatDateTime,
+  truncateValue,
+} from "@/lib/formatting"
 import type { AnalyticsOverview, CollegeLeaderboardEntry } from "@/lib/types"
 
 export default function CollegesPage() {
@@ -113,10 +119,22 @@ export default function CollegesPage() {
     featuredCollege && totals.totalEduMinted > 0
       ? Math.round((featuredCollege.totalEduMinted / totals.totalEduMinted) * 100)
       : null
+  const leaderboardInsight = featuredCollege
+    ? `${featuredCollege.instituteName} currently leads with ${featuredCollege.totalEduMinted.toLocaleString()} EDU minted across ${featuredCollege.mintedCertificates} credentials.`
+    : "The leaderboard will highlight the lead institute once real mint activity is available."
+  const chartAverage =
+    filteredColleges.length > 0
+      ? Math.round(
+          filteredColleges.reduce(
+            (sum, college) => sum + college.totalEduMinted,
+            0
+          ) / filteredColleges.length
+        )
+      : 0
 
   return (
     <PageLayout>
-      <section className="mb-10 grid gap-8 xl:grid-cols-[1.08fr_0.92fr]">
+      <section className="mb-10 grid gap-8 xl:grid-cols-[1.08fr_0.92fr] xl:items-start">
         <div className="brand-panel-light px-8 py-9 sm:px-10">
           <div className="brand-kicker">Institute Index</div>
           <div className="mt-6 text-[11px] uppercase tracking-[0.34em] text-[#4f5966]">
@@ -221,6 +239,20 @@ export default function CollegesPage() {
               placeholder="Search by institute name or slug"
               className="w-full rounded-[20px] border border-[#eedfce]/12 bg-[rgba(255,255,255,0.04)] px-4 py-3 text-[#f7efe3] placeholder:text-[#8ea0b8] focus:border-[#d25b36]/40 focus:outline-none"
             />
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+              <p className="text-xs text-[#8ea0b8]">
+                Search updates live across institute names and public slugs.
+              </p>
+              {searchQuery.trim() ? (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  className="rounded-full border border-[#eedfce]/12 bg-[rgba(255,255,255,0.05)] px-3 py-1.5 text-xs font-medium uppercase tracking-[0.16em] text-[#f7efe3] transition hover:bg-[rgba(255,255,255,0.1)]"
+                >
+                  Clear Search
+                </button>
+              ) : null}
+            </div>
           </div>
           <div className="flex flex-col justify-end">
             <div className="rounded-[20px] border border-[#eedfce]/10 bg-[rgba(255,255,255,0.03)] px-4 py-3 text-sm text-[#c8d0de]">
@@ -230,8 +262,55 @@ export default function CollegesPage() {
         </div>
       </div>
 
+      {!isLoading && !errorMessage ? (
+        <div className="mb-8 grid gap-6 xl:grid-cols-[1.05fr_0.95fr] xl:items-start">
+          <div className="brand-panel p-7">
+            <div className="text-[11px] uppercase tracking-[0.3em] text-[#8bbbd5]">
+              Leaderboard Insight
+            </div>
+            <h2 className="display-serif mt-2 text-[2.1rem] font-semibold text-[#f7efe3]">
+              One primary story from the network.
+            </h2>
+            <p className="mt-4 max-w-3xl text-[#c8d0de]">{leaderboardInsight}</p>
+
+            <div className="mt-6 grid gap-4 sm:grid-cols-3">
+              <div className="rounded-[22px_12px_22px_12px] border border-[#eedfce]/10 bg-[rgba(255,255,255,0.03)] p-4">
+                <div className="text-[11px] uppercase tracking-[0.24em] text-[#8ea0b8]">
+                  Average EDU / institute
+                </div>
+                <div className="display-serif mt-2 text-[2rem] text-[#f7efe3]">
+                  {chartAverage.toLocaleString()}
+                </div>
+              </div>
+              <div className="rounded-[22px_12px_22px_12px] border border-[#eedfce]/10 bg-[rgba(255,255,255,0.03)] p-4">
+                <div className="text-[11px] uppercase tracking-[0.24em] text-[#8ea0b8]">
+                  Search coverage
+                </div>
+                <div className="display-serif mt-2 text-[2rem] text-[#f7efe3]">
+                  {filteredColleges.length}/{colleges.length}
+                </div>
+              </div>
+              <div className="rounded-[22px_12px_22px_12px] border border-[#eedfce]/10 bg-[rgba(255,255,255,0.03)] p-4">
+                <div className="text-[11px] uppercase tracking-[0.24em] text-[#8ea0b8]">
+                  Leader share
+                </div>
+                <div className="display-serif mt-2 text-[2rem] text-[#f7efe3]">
+                  {leadingShare !== null ? `${leadingShare}%` : "Pending"}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <StatusBanner
+            tone="neutral"
+            title="How to read this index"
+            message="Only minted credentials count here. EDU volume shows the reward economy tied to verified outcomes, while certificate and student counts show how broadly an institute is participating."
+          />
+        </div>
+      ) : null}
+
       {featuredCollege ? (
-        <div className="mb-8 grid gap-8 xl:grid-cols-[1.02fr_0.98fr]">
+        <div className="mb-8 grid gap-8 xl:grid-cols-[1.02fr_0.98fr] xl:items-start">
           <div className="brand-panel-light px-8 py-8">
             <div className="text-[11px] uppercase tracking-[0.3em] text-[#6f563f]">
               Featured Institute
@@ -330,7 +409,7 @@ export default function CollegesPage() {
       ) : null}
 
       {overview ? (
-        <div className="mb-8 grid grid-cols-1 gap-8 xl:grid-cols-[0.95fr_1.05fr]">
+        <div className="mb-8 grid grid-cols-1 gap-8 xl:grid-cols-[0.95fr_1.05fr] xl:items-start">
           <div className="brand-panel p-7">
             <div className="text-[11px] uppercase tracking-[0.3em] text-[#8bbbd5]">
               Network Momentum
@@ -379,6 +458,25 @@ export default function CollegesPage() {
                 </BarChart>
               </ResponsiveContainer>
             </div>
+
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-[22px_12px_22px_12px] border border-[#eedfce]/10 bg-[rgba(255,255,255,0.03)] p-4">
+                <div className="text-[11px] uppercase tracking-[0.22em] text-[#8ea0b8]">
+                  Chart reading
+                </div>
+                <p className="mt-2 text-sm leading-6 text-[#d8e0ec]">
+                  Bars compare EDU minted by the top visible institutes in the current search result.
+                </p>
+              </div>
+              <div className="rounded-[22px_12px_22px_12px] border border-[#eedfce]/10 bg-[rgba(255,255,255,0.03)] p-4">
+                <div className="text-[11px] uppercase tracking-[0.22em] text-[#8ea0b8]">
+                  Visible slice
+                </div>
+                <p className="mt-2 text-sm leading-6 text-[#d8e0ec]">
+                  The chart shows up to six institutes at a time so labels stay readable and comparable.
+                </p>
+              </div>
+            </div>
           </div>
 
           <div className="brand-panel-light px-8 py-7">
@@ -401,15 +499,20 @@ export default function CollegesPage() {
                     className="rounded-[24px_12px_24px_12px] border border-[#101828]/12 bg-[rgba(255,255,255,0.82)] p-4"
                   >
                     <div className="flex items-start justify-between gap-4">
-                      <div>
+                      <div className="min-w-0">
                         <div className="text-[11px] uppercase tracking-[0.26em] text-[#5f7f68]">
                           {activity.tokenId ? `Token #${activity.tokenId}` : "Minted Record"}
                         </div>
-                        <div className="mt-2 display-serif text-[1.55rem] font-semibold text-[#101828]">
+                        <div className="mt-2 display-serif text-[1.55rem] font-semibold text-[#101828] [overflow-wrap:anywhere]">
                           {activity.courseName}
                         </div>
-                        <div className="text-sm text-[#425168]">
-                          {activity.instituteName}
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <div className="text-sm text-[#425168]">
+                            {activity.instituteName}
+                          </div>
+                          <div className="rounded-full border border-[#b8892d]/20 bg-[#b8892d]/10 px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-[#6f563f]">
+                            {formatCredentialTypeLabel(activity.credentialType)}
+                          </div>
                         </div>
                       </div>
                       <div className="rounded-full border border-[#8bbbd5]/24 bg-[#8bbbd5]/12 px-3 py-1 text-xs font-medium text-[#345166]">
@@ -443,23 +546,35 @@ export default function CollegesPage() {
         </div>
       ) : errorMessage ? (
         <div className="brand-panel p-8">
-          <div className="py-12 text-center">
-            <h2 className="display-serif mb-2 text-[2.3rem] font-semibold text-[#f7efe3]">
-              Could not load the leaderboard
-            </h2>
-            <p className="text-[#c8d0de]">{errorMessage}</p>
-          </div>
+          <EmptyStatePanel
+            title="Could not load the leaderboard"
+            description={errorMessage}
+            action={
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="brand-button-secondary px-5 py-3 text-sm"
+              >
+                Try Again
+              </button>
+            }
+          />
         </div>
       ) : filteredColleges.length === 0 ? (
         <div className="brand-panel p-8">
-          <div className="py-12 text-center">
-            <h2 className="display-serif mb-2 text-[2.3rem] font-semibold text-[#f7efe3]">
-              No institutes match that search
-            </h2>
-            <p className="text-[#c8d0de]">
-              Try a broader search term to explore the leaderboard again.
-            </p>
-          </div>
+          <EmptyStatePanel
+            title="No institutes match that search"
+            description="Try a broader search term to explore the leaderboard again."
+            action={
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="brand-button-secondary px-5 py-3 text-sm"
+              >
+                Clear Search
+              </button>
+            }
+          />
         </div>
       ) : (
         <div className="brand-panel-light px-7 py-7 sm:px-8">
@@ -484,8 +599,8 @@ export default function CollegesPage() {
                   <div className="display-serif mt-2 text-[2.2rem]">#{college.rank}</div>
                 </div>
 
-                <div>
-                  <h3 className="display-serif text-[2rem] font-semibold leading-none text-[#101828]">
+                <div className="min-w-0">
+                  <h3 className="display-serif text-[2rem] font-semibold leading-none text-[#101828] [overflow-wrap:anywhere]">
                     {college.instituteName}
                   </h3>
                   <p className="mt-2 text-sm text-[#425168]">
@@ -517,6 +632,36 @@ export default function CollegesPage() {
                       </div>
                     </div>
                   </div>
+
+                  <div className="mt-4">
+                    <div className="mb-2 flex items-center justify-between text-[11px] uppercase tracking-[0.22em] text-[#4d596d]">
+                      <span>Share of total EDU</span>
+                      <span>
+                        {totals.totalEduMinted > 0
+                          ? `${Math.round(
+                              (college.totalEduMinted / totals.totalEduMinted) * 100
+                            )}%`
+                          : "0%"}
+                      </span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-[#dfe6ef]">
+                      <div
+                        className="h-full rounded-full bg-[linear-gradient(90deg,#d25b36,#8bbbd5)]"
+                        style={{
+                          width: `${
+                            totals.totalEduMinted > 0
+                              ? Math.max(
+                                  10,
+                                  Math.round(
+                                    (college.totalEduMinted / totals.totalEduMinted) * 100
+                                  )
+                                )
+                              : 10
+                          }%`,
+                        }}
+                      />
+                    </div>
+                  </div>
                 </div>
 
                 <div className="flex flex-col justify-center rounded-[20px_10px_20px_10px] border border-[#101828]/10 bg-[rgba(255,255,255,0.55)] px-4 py-4 text-center">
@@ -525,6 +670,13 @@ export default function CollegesPage() {
                   </div>
                   <div className="display-serif mt-2 text-[2.2rem] text-[#101828]">
                     {college.totalEduMinted.toLocaleString()}
+                  </div>
+                  <div className="mt-3 text-sm text-[#425168]">
+                    {college.mintedCertificates > 0
+                      ? `${Math.round(
+                          college.totalEduMinted / college.mintedCertificates
+                        )} EDU per credential`
+                      : "No minted credentials yet"}
                   </div>
                 </div>
 

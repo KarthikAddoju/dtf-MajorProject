@@ -1,5 +1,18 @@
 import mongoose from "mongoose";
 
+const CREDENTIAL_TYPE_SET = new Set([
+  "course",
+  "workshop",
+  "quiz",
+  "hackathon",
+  "competition",
+  "seminar",
+  "bootcamp",
+  "internship",
+  "certification",
+  "other",
+]);
+
 export function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
@@ -34,4 +47,8 @@ export function parsePositiveNumber(value: unknown) {
   }
 
   return parsedValue;
+}
+
+export function isCredentialType(value: unknown): value is string {
+  return typeof value === "string" && CREDENTIAL_TYPE_SET.has(value);
 }

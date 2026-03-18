@@ -1,4 +1,5 @@
 import { BrowserProvider, type JsonRpcSigner } from "ethers"
+import type { AuthFlowState } from "@/lib/types"
 
 interface EthereumProviderLike {
   isMetaMask?: boolean
@@ -32,6 +33,40 @@ export class WalletConnectionError extends Error {
   }
 }
 
+function getErrorCode(error: unknown) {
+  if (!error || typeof error !== "object" || !("code" in error)) {
+    return undefined
+  }
+
+  const { code } = error as { code?: unknown }
+
+  return typeof code === "string" || typeof code === "number" ? code : undefined
+}
+
+export function isWalletActionRejected(error: unknown) {
+  if (error instanceof WalletConnectionError && error.code === "USER_REJECTED") {
+    return true
+  }
+
+  const code = getErrorCode(error)
+
+  if (code === 4001 || code === "ACTION_REJECTED") {
+    return true
+  }
+
+  if (!(error instanceof Error)) {
+    return false
+  }
+
+  const normalizedMessage = error.message.toLowerCase()
+
+  return (
+    normalizedMessage.includes("user rejected") ||
+    normalizedMessage.includes("action_rejected") ||
+    normalizedMessage.includes("rejectallapprovals")
+  )
+}
+
 const SUPPORTED_CHAIN_IDS = new Set([1337, 31337])
 const HARDHAT_CHAIN_PARAMETERS = {
   chainId: "0x7a69",
@@ -58,6 +93,24 @@ export function getWalletNetworkLabel(chainId: number | null) {
   }
 
   return `Unsupported Chain (${chainId})`
+}
+
+export function getWalletSignInLabel(
+  authFlowState: AuthFlowState,
+  hasConnectedWallet: boolean
+) {
+  switch (authFlowState) {
+    case "connecting_wallet":
+      return "Connecting Wallet..."
+    case "awaiting_signature":
+      return "Awaiting Signature..."
+    case "wallet_connected":
+      return "Complete Sign-In"
+    case "authenticated":
+      return "Signed In"
+    default:
+      return hasConnectedWallet ? "Complete Sign-In" : "Connect & Sign In"
+  }
 }
 
 function normalizeAddress(address: string) {
@@ -147,7 +200,19 @@ export async function connectWallet(): Promise<ConnectedWallet> {
   const ethereum = ensureEthereumProvider()
 
   const provider = new BrowserProvider(ethereum)
-  await provider.send("eth_requestAccounts", [])
+
+  try {
+    await provider.send("eth_requestAccounts", [])
+  } catch (error) {
+    if (isWalletActionRejected(error)) {
+      throw new WalletConnectionError(
+        "Wallet connection was canceled.",
+        "USER_REJECTED"
+      )
+    }
+
+    throw error
+  }
 
   let wallet = await buildWalletSnapshot(provider)
 

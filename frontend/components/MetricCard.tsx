@@ -23,7 +23,7 @@ export function MetricCard({ title, value, icon, accentColor = "blue" }: MetricC
   }
 
   return (
-    <div className="brand-panel min-h-[172px] p-6 transition-transform duration-200 hover:-translate-y-0.5">
+    <div className="brand-panel brand-card-hover min-h-[172px] p-6">
       <div
         className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${accentStyles[accentColor]}`}
       />

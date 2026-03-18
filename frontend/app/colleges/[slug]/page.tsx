@@ -4,10 +4,16 @@ import Link from "next/link"
 import { useParams } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
 import { DashboardCard } from "@/components/DashboardCard"
+import { EmptyStatePanel } from "@/components/EmptyStatePanel"
 import { MetricCard } from "@/components/MetricCard"
 import { PageLayout } from "@/components/PageLayout"
+import { StatusBanner } from "@/components/StatusBanner"
 import { fetchInstituteProfile, isAbortError } from "@/lib/api"
-import { formatDateTime, truncateValue } from "@/lib/formatting"
+import {
+  formatCredentialTypeLabel,
+  formatDateTime,
+  truncateValue,
+} from "@/lib/formatting"
 import type { InstituteProfile } from "@/lib/types"
 
 export default function InstituteProfilePage() {
@@ -73,6 +79,12 @@ export default function InstituteProfilePage() {
           : 12,
     }))
   }, [profile?.topCourses])
+  const leadCourse = courseLeaderboard[0] ?? null
+  const instituteInsight = profile
+    ? profile.stats.mintedCredentials > 0
+      ? `${profile.institute.name} has issued ${profile.stats.mintedCredentials} verified credentials to ${profile.stats.uniqueStudents} students, with ${profile.stats.totalEduMinted.toLocaleString()} EDU distributed so far.`
+      : `${profile.institute.name} is listed in DACS, but public mint activity has not started yet.`
+    : null
 
   return (
     <PageLayout>
@@ -84,18 +96,20 @@ export default function InstituteProfilePage() {
         </DashboardCard>
       ) : errorMessage || !profile ? (
         <DashboardCard>
-          <div className="py-16 text-center">
-            <h1 className="text-2xl font-semibold text-white">Profile unavailable</h1>
-            <p className="mt-3 text-slate-300">
-              {errorMessage ?? "The requested institute profile could not be found."}
-            </p>
-            <Link
-              href="/colleges"
-              className="mt-6 inline-flex rounded-xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
-            >
-              Return to College Index
-            </Link>
-          </div>
+          <EmptyStatePanel
+            title="Profile unavailable"
+            description={
+              errorMessage ?? "The requested institute profile could not be found."
+            }
+            action={
+              <Link
+                href="/colleges"
+                className="brand-button-secondary px-5 py-3 text-sm"
+              >
+                Return to College Index
+              </Link>
+            }
+          />
         </DashboardCard>
       ) : (
         <>
@@ -179,13 +193,52 @@ export default function InstituteProfilePage() {
             />
           </div>
 
-          <div className="grid grid-cols-1 gap-8 xl:grid-cols-[0.95fr_1.05fr]">
-            <DashboardCard title="Top Performing Courses">
-              {courseLeaderboard.length === 0 ? (
-                <div className="rounded-2xl border border-white/10 bg-black/20 p-6 text-center text-slate-400">
-                  The course leaderboard will appear once this institute mints live
-                  credentials on DACS.
+          {instituteInsight ? (
+            <div className="mb-8 grid gap-6 xl:grid-cols-[1.02fr_0.98fr] xl:items-start">
+              <DashboardCard title="Institute Position">
+                <div className="space-y-4">
+                  <p className="text-[#d8e0ec]">{instituteInsight}</p>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                      <div className="text-[11px] uppercase tracking-[0.22em] text-slate-500">
+                        Issuance posture
+                      </div>
+                      <div className="mt-2 text-white">
+                        {profile.stats.pendingSubmissions > 0
+                          ? `${profile.stats.pendingSubmissions} submissions are still in review`
+                          : "No current review backlog"}
+                      </div>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                      <div className="text-[11px] uppercase tracking-[0.22em] text-slate-500">
+                        Strongest credential line
+                      </div>
+                      <div className="mt-2 text-white">
+                        {leadCourse
+                          ? `${leadCourse.courseName} • ${leadCourse.totalEduMinted.toLocaleString()} EDU`
+                          : "Waiting for live mint activity"}
+                      </div>
+                    </div>
+                  </div>
                 </div>
+              </DashboardCard>
+
+              <StatusBanner
+                tone="neutral"
+                title="How to read this profile"
+                message="This page blends public workflow health with minted credential history. EDU totals show reward volume, while credential and student counts show how widely the institute is creating verifiable outcomes."
+              />
+            </div>
+          ) : null}
+
+          <div className="grid grid-cols-1 gap-8 xl:grid-cols-[0.95fr_1.05fr] xl:items-start">
+            <DashboardCard title="Top Credential Titles">
+              {courseLeaderboard.length === 0 ? (
+                <EmptyStatePanel
+                  eyebrow="Title rankings"
+                  title="No credential leaderboard yet"
+                  description="This panel will highlight the strongest credential lines once the institute starts minting verified outcomes on DACS."
+                />
               ) : (
                 <div className="space-y-4">
                   {courseLeaderboard.map((course, index) => (
@@ -194,15 +247,20 @@ export default function InstituteProfilePage() {
                       className="rounded-2xl border border-white/10 bg-white/[0.03] p-4"
                     >
                       <div className="flex items-start justify-between gap-4">
-                        <div>
+                        <div className="min-w-0">
                           <div className="text-xs uppercase tracking-[0.2em] text-[#f3d9a2]">
-                            Course Rank #{index + 1}
+                            Credential Rank #{index + 1}
                           </div>
-                          <div className="mt-2 text-lg font-semibold text-white">
+                          <div className="mt-2 text-lg font-semibold text-white [overflow-wrap:anywhere]">
                             {course.courseName}
                           </div>
-                          <div className="mt-1 text-sm text-slate-400">
-                            {course.mintedCount} minted credentials
+                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <div className="text-sm text-slate-400">
+                              {course.mintedCount} minted credentials
+                            </div>
+                            <div className="rounded-full border border-[#b8892d]/20 bg-[#b8892d]/10 px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-[#f3d9a2]">
+                              {formatCredentialTypeLabel(course.credentialType)}
+                            </div>
                           </div>
                         </div>
                         <div className="rounded-full border border-[#0f766e]/30 bg-[#0f766e]/12 px-3 py-1 text-xs font-medium text-[#b9e7df]">
@@ -224,9 +282,19 @@ export default function InstituteProfilePage() {
 
             <DashboardCard title="Recent Verified Credentials">
               {profile.recentCredentials.length === 0 ? (
-                <div className="rounded-2xl border border-white/10 bg-black/20 p-6 text-center text-slate-400">
-                  No minted credentials are public for this institute yet.
-                </div>
+                <EmptyStatePanel
+                  eyebrow="Public credential feed"
+                  title="No public credentials yet"
+                  description="Minted credentials from this institute will appear here once verified outcomes go live on DACS."
+                  action={
+                    <Link
+                      href="/colleges"
+                      className="brand-button-secondary px-5 py-3 text-sm"
+                    >
+                      Back To College Index
+                    </Link>
+                  }
+                />
               ) : (
                 <div className="space-y-4">
                   {profile.recentCredentials.map((credential) => (
@@ -235,16 +303,19 @@ export default function InstituteProfilePage() {
                       className="rounded-2xl border border-white/10 bg-white/[0.03] p-5"
                     >
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                        <div>
+                        <div className="min-w-0">
                           <div className="text-xs uppercase tracking-[0.2em] text-[#0fba9b]">
                             {credential.tokenId
                               ? `Token #${credential.tokenId}`
                               : "Credential record"}
                           </div>
-                          <h3 className="mt-2 text-lg font-semibold text-white">
+                          <h3 className="mt-2 text-lg font-semibold text-white [overflow-wrap:anywhere]">
                             {credential.courseName}
                           </h3>
                           <div className="mt-2 flex flex-wrap gap-2">
+                            <div className="rounded-full border border-[#b8892d]/20 bg-[#b8892d]/10 px-3 py-1 text-xs uppercase tracking-[0.18em] text-[#f3d9a2]">
+                              {formatCredentialTypeLabel(credential.credentialType)}
+                            </div>
                             <div className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs text-slate-300">
                               Student {truncateValue(credential.studentAddress, 10, 8)}
                             </div>
@@ -281,7 +352,7 @@ export default function InstituteProfilePage() {
                           rel="noreferrer"
                           className="rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10"
                         >
-                          View IPFS Evidence
+                          Open Evidence File
                         </a>
                       </div>
                     </div>

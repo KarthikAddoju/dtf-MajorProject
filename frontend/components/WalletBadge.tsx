@@ -12,7 +12,7 @@ export function WalletBadge({ address, label = "Wallet" }: WalletBadgeProps) {
         W
       </div>
       <div className="leading-none">
-        <div className="text-[10px] uppercase tracking-[0.24em] text-[#9eabbc]">
+        <div className="brand-status-dot text-[10px] uppercase tracking-[0.24em] text-[#9eabbc]">
           {label}
         </div>
         <div className="mt-1 font-mono text-sm text-[#f3ecdf]">{truncatedAddress}</div>

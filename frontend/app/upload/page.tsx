@@ -11,8 +11,11 @@ import {
   useState,
 } from "react"
 import { toast } from "sonner"
+import { EmptyStatePanel } from "@/components/EmptyStatePanel"
 import { PageLayout } from "@/components/PageLayout"
 import { RoleBadge } from "@/components/RoleBadge"
+import { StatusBanner } from "@/components/StatusBanner"
+import { SubmissionStatusCenter } from "@/components/SubmissionStatusCenter"
 import { WalletBadge } from "@/components/WalletBadge"
 import { useAuth } from "@/components/AuthProvider"
 import {
@@ -21,7 +24,15 @@ import {
   isAbortError,
   uploadCertificate,
 } from "@/lib/api"
-import type { Institute, Submission, SubmissionStatus } from "@/lib/types"
+import { formatCredentialTypeLabel } from "@/lib/formatting"
+import { getWalletSignInLabel } from "@/lib/wallet"
+import type {
+  CredentialType,
+  Institute,
+  Submission,
+  SubmissionStatus,
+} from "@/lib/types"
+import { CREDENTIAL_TYPE_OPTIONS } from "@/lib/types"
 
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024
 const ACCEPTED_MIME_TYPES = new Set([
@@ -74,18 +85,46 @@ function getStatusLabel(status: SubmissionStatus) {
 
 function validateFile(file: File) {
   if (!ACCEPTED_MIME_TYPES.has(file.type)) {
-    return "Upload a PDF, PNG, or JPEG certificate file."
+    return "Upload a PDF, PNG, or JPEG credential evidence file."
   }
 
   if (file.size > MAX_FILE_SIZE_BYTES) {
-    return "Certificate files must be 10 MB or smaller."
+    return "Credential evidence files must be 10 MB or smaller."
   }
 
   return null
 }
 
+type UploadFieldName = "courseName" | "instituteId" | "certificate"
+
+function getUploadFieldErrors(input: {
+  courseName: string
+  instituteId: string
+  selectedFile: File | null
+  fileValidationError: string | null
+}) {
+  const errors: Partial<Record<UploadFieldName, string>> = {}
+
+  if (!input.courseName.trim()) {
+    errors.courseName = "Enter a credential title so reviewers know what they are verifying."
+  }
+
+  if (!input.instituteId) {
+    errors.instituteId = "Select the institute that issued or hosted this credential."
+  }
+
+  if (input.fileValidationError) {
+    errors.certificate = input.fileValidationError
+  } else if (!input.selectedFile) {
+    errors.certificate = "Attach the credential evidence file before submitting."
+  }
+
+  return errors
+}
+
 export default function UploadPage() {
   const {
+    authFlowState,
     connectAndSignIn,
     connectedWalletAddress,
     isAuthenticated,
@@ -93,12 +132,14 @@ export default function UploadPage() {
     isReady,
     token,
     user,
+    walletNote,
   } = useAuth()
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   const [institutes, setInstitutes] = useState<Institute[]>([])
   const [submissions, setSubmissions] = useState<Submission[]>([])
   const [courseName, setCourseName] = useState("")
+  const [credentialType, setCredentialType] = useState<CredentialType>("course")
   const [instituteId, setInstituteId] = useState("")
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [isDragging, setIsDragging] = useState(false)
@@ -107,6 +148,18 @@ export default function UploadPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [submissionStatus, setSubmissionStatus] = useState<{
+    tone: "success" | "warning" | "error"
+    title: string
+    message: string
+  } | null>(null)
+  const [fileValidationError, setFileValidationError] = useState<string | null>(null)
+  const [submitAttempted, setSubmitAttempted] = useState(false)
+  const [touchedFields, setTouchedFields] = useState<Record<UploadFieldName, boolean>>({
+    courseName: false,
+    instituteId: false,
+    certificate: false,
+  })
 
   useEffect(() => {
     const controller = new AbortController()
@@ -190,9 +243,11 @@ export default function UploadPage() {
   }, [token])
 
   function assignFile(file: File | null) {
+    setTouchedFields((current) => ({ ...current, certificate: true }))
+
     if (!file) {
       setSelectedFile(null)
-      setErrorMessage(null)
+      setFileValidationError(null)
       return
     }
 
@@ -200,12 +255,12 @@ export default function UploadPage() {
 
     if (validationMessage) {
       setSelectedFile(null)
-      setErrorMessage(validationMessage)
-      toast.error(validationMessage)
+      setFileValidationError(validationMessage)
       return
     }
 
     setSelectedFile(file)
+    setFileValidationError(null)
     setErrorMessage(null)
   }
 
@@ -233,30 +288,43 @@ export default function UploadPage() {
     event.preventDefault()
 
     if (!token) {
-      toast.error("Connect your wallet and sign in before uploading.")
+      setSubmissionStatus({
+        tone: "warning",
+        title: "Wallet sign-in required",
+        message:
+          "Connect MetaMask and complete the signed session before submitting a credential.",
+      })
       return
     }
 
     const authToken = token
 
-    if (!courseName.trim()) {
-      setErrorMessage("Enter the course name before uploading.")
-      return
-    }
+    setSubmitAttempted(true)
+    setTouchedFields({
+      courseName: true,
+      instituteId: true,
+      certificate: true,
+    })
+    setErrorMessage(null)
 
-    if (!instituteId) {
-      setErrorMessage("Select an institute before uploading.")
+    if (Object.keys(fieldErrors).length > 0) {
+      setSubmissionStatus({
+        tone: "warning",
+        title: "Finish the intake sheet",
+        message:
+          "Fix the highlighted fields first so DACS can create a complete review record.",
+      })
       return
     }
 
     if (!selectedFile) {
-      setErrorMessage("Drag in a certificate file or choose one from your system.")
       return
     }
 
     setIsSubmitting(true)
     setErrorMessage(null)
     setUploadProgress(0)
+    setSubmissionStatus(null)
 
     try {
       const response = await uploadCertificate(
@@ -264,6 +332,7 @@ export default function UploadPage() {
         {
           certificate: selectedFile,
           courseName: courseName.trim(),
+          credentialType,
           instituteId,
         },
         setUploadProgress
@@ -274,19 +343,36 @@ export default function UploadPage() {
         ...currentSubmissions,
       ])
       setCourseName("")
+      setCredentialType("course")
       setSelectedFile(null)
+      setFileValidationError(null)
       setUploadProgress(0)
+      setSubmitAttempted(false)
+      setTouchedFields({
+        courseName: false,
+        instituteId: false,
+        certificate: false,
+      })
 
       if (fileInputRef.current) {
         fileInputRef.current.value = ""
       }
 
-      toast.success("Certificate uploaded to IPFS and queued for admin review.")
+      setSubmissionStatus({
+        tone: "success",
+        title: "Credential submitted",
+        message:
+          "Your evidence is now stored in IPFS and the submission has entered the admin review queue.",
+      })
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Upload failed unexpectedly"
-      setErrorMessage(message)
-      toast.error(message)
+      setErrorMessage(null)
+      setSubmissionStatus({
+        tone: "error",
+        title: "Upload could not finish",
+        message,
+      })
     } finally {
       setIsSubmitting(false)
     }
@@ -295,6 +381,36 @@ export default function UploadPage() {
   const selectedInstitute = useMemo(
     () => institutes.find((institute) => institute.id === instituteId) ?? null,
     [instituteId, institutes]
+  )
+  const fieldErrors = useMemo(
+    () =>
+      getUploadFieldErrors({
+        courseName,
+        instituteId,
+        selectedFile,
+        fileValidationError,
+      }),
+    [courseName, instituteId, selectedFile, fileValidationError]
+  )
+  const visibleFieldErrors = useMemo(
+    () => ({
+      courseName:
+        submitAttempted || touchedFields.courseName ? fieldErrors.courseName : undefined,
+      instituteId:
+        submitAttempted || touchedFields.instituteId ? fieldErrors.instituteId : undefined,
+      certificate:
+        submitAttempted || touchedFields.certificate ? fieldErrors.certificate : undefined,
+    }),
+    [fieldErrors, submitAttempted, touchedFields]
+  )
+  const formSummaryItems = useMemo(
+    () =>
+      [
+        visibleFieldErrors.courseName,
+        visibleFieldErrors.instituteId,
+        visibleFieldErrors.certificate,
+      ].filter((message): message is string => Boolean(message)),
+    [visibleFieldErrors]
   )
   const readinessChecks = useMemo(
     () => [
@@ -311,9 +427,14 @@ export default function UploadPage() {
         detail: isAuthenticated ? "Authenticated for upload" : "Sign in required",
       },
       {
-        label: "Course title",
+        label: "Credential title",
         ready: !!courseName.trim(),
         detail: courseName.trim() || "Add the credential title",
+      },
+      {
+        label: "Credential type",
+        ready: !!credentialType,
+        detail: formatCredentialTypeLabel(credentialType),
       },
       {
         label: "Institute selected",
@@ -332,28 +453,30 @@ export default function UploadPage() {
     ],
     [
       connectedWalletAddress,
+      credentialType,
       courseName,
       isAuthenticated,
       selectedFile,
       selectedInstitute,
     ]
   )
+  const readinessCount = readinessChecks.filter((check) => check.ready).length
 
   return (
     <PageLayout>
-      <section className="mb-8 grid gap-8 xl:grid-cols-[1.08fr_0.92fr]">
-        <div className="brand-panel-light px-8 py-9 sm:px-10">
+      <section className="mb-8 grid gap-8 xl:grid-cols-[1.08fr_0.92fr] xl:items-start">
+        <div className="brand-panel-light self-start px-8 py-9 sm:px-10">
           <div className="brand-kicker">Submission Studio</div>
           <div className="mt-6 text-[11px] uppercase tracking-[0.34em] text-[#4f5966]">
             Student / Upload / Evidence intake
           </div>
           <h1 className="display-serif mt-4 max-w-4xl text-5xl font-semibold leading-[0.95] text-[#101828] sm:text-6xl">
-            Turn a certificate file into a verified credential candidate.
+            Turn any academic achievement into a verified credential candidate.
           </h1>
           <p className="mt-5 max-w-2xl text-lg leading-8 text-[#243246]">
-            This workspace binds your certificate to wallet identity, institute
-            context, and a persistent review record before it ever reaches the mint
-            controller.
+            This workspace binds your academic credential evidence to wallet
+            identity, institute context, and a persistent review record before it
+            ever reaches the mint controller.
           </p>
 
           <div className="mt-8 flex flex-wrap items-center gap-3">
@@ -384,8 +507,8 @@ export default function UploadPage() {
           <div className="mt-6 grid gap-3">
             {[
               "Upload the original evidence file from your local system.",
-              "Attach the right course title and institute before submission.",
-              "Create an IPFS-backed record that enters the admin review queue.",
+              "Attach the right credential title, type, and institute before submission.",
+              "Create an IPFS-backed credential record that enters the admin review queue.",
               "Track approval, mint outcome, token ID, and EDU reward live.",
             ].map((step, index) => (
               <div
@@ -415,7 +538,7 @@ export default function UploadPage() {
           <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h2 className="display-serif mb-2 text-[2rem] font-semibold text-[#f7efe3]">
-                Wallet sign-in is required for certificate upload
+                Wallet sign-in is required for credential submission
               </h2>
               <p className="max-w-2xl text-[#c8d0de]">
                 Uploads are bound to your wallet identity so the backend can store a
@@ -428,21 +551,30 @@ export default function UploadPage() {
               disabled={isAuthenticating}
               className="brand-button-primary px-6 py-3 text-sm disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {isAuthenticating ? "Connecting..." : "Connect & Sign In"}
+              {getWalletSignInLabel(authFlowState, Boolean(connectedWalletAddress))}
             </button>
           </div>
+          {walletNote ? (
+            <StatusBanner
+              className="mt-5"
+              compact
+              tone="neutral"
+              title="Session Note"
+              message={walletNote}
+            />
+          ) : null}
         </div>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-8 xl:grid-cols-[1.15fr_0.85fr]">
-        <div className="brand-panel-light px-7 py-7 sm:px-8">
+      <div className="grid grid-cols-1 gap-8 xl:grid-cols-[1.15fr_0.85fr] xl:items-start">
+        <div className="brand-panel-light self-start px-7 py-7 sm:px-8">
           <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <div className="text-[11px] uppercase tracking-[0.3em] text-[#6f563f]">
                 Intake Sheet
               </div>
               <h2 className="display-serif mt-2 text-[2.3rem] font-semibold text-[#101828]">
-                Submit a new certificate
+                Submit a new academic credential
               </h2>
             </div>
             <div className="brand-chip-light">
@@ -452,38 +584,94 @@ export default function UploadPage() {
             </div>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <form id="upload-credential-form" onSubmit={handleSubmit} className="space-y-5">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               <div>
                 <label
                   htmlFor="courseName"
-                  className="mb-2 block text-sm font-medium text-[#475569]"
+                  className="brand-field-label"
                 >
-                  Course Name
+                  Credential Title
                 </label>
                 <input
                   id="courseName"
                   type="text"
                   value={courseName}
-                  onChange={(event) => setCourseName(event.target.value)}
+                  onChange={(event) => {
+                    setCourseName(event.target.value)
+                    setErrorMessage(null)
+                  }}
+                  onBlur={() =>
+                    setTouchedFields((current) => ({ ...current, courseName: true }))
+                  }
                   placeholder="Advanced Machine Learning"
                   className="brand-input"
+                  aria-invalid={Boolean(visibleFieldErrors.courseName)}
+                  aria-describedby="courseNameHint courseNameError"
+                  data-invalid={visibleFieldErrors.courseName ? "true" : "false"}
                 />
+                <p id="courseNameHint" className="brand-field-hint">
+                  Use the official title of the course, workshop, hackathon, quiz,
+                  or other academic achievement.
+                </p>
+                {visibleFieldErrors.courseName ? (
+                  <p id="courseNameError" className="brand-field-error" role="alert">
+                    {visibleFieldErrors.courseName}
+                  </p>
+                ) : null}
+              </div>
+
+              <div>
+                <label
+                  htmlFor="credentialType"
+                  className="brand-field-label"
+                >
+                  Credential Type
+                </label>
+                <select
+                  id="credentialType"
+                  value={credentialType}
+                  onChange={(event) => {
+                    setCredentialType(event.target.value as CredentialType)
+                    setErrorMessage(null)
+                  }}
+                  className="brand-input"
+                  aria-describedby="credentialTypeHint"
+                >
+                  {CREDENTIAL_TYPE_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {formatCredentialTypeLabel(option)}
+                    </option>
+                  ))}
+                </select>
+                <p id="credentialTypeHint" className="brand-field-hint">
+                  Pick the closest type so dashboards, institute analytics, and
+                  proof sheets classify it correctly.
+                </p>
               </div>
 
               <div>
                 <label
                   htmlFor="instituteId"
-                  className="mb-2 block text-sm font-medium text-[#475569]"
+                  className="brand-field-label"
                 >
                   Institute
                 </label>
                 <select
                   id="instituteId"
                   value={instituteId}
-                  onChange={(event) => setInstituteId(event.target.value)}
+                  onChange={(event) => {
+                    setInstituteId(event.target.value)
+                    setErrorMessage(null)
+                  }}
+                  onBlur={() =>
+                    setTouchedFields((current) => ({ ...current, instituteId: true }))
+                  }
                   disabled={isLoadingInstitutes}
                   className="brand-input"
+                  aria-invalid={Boolean(visibleFieldErrors.instituteId)}
+                  aria-describedby="instituteIdHint instituteIdError"
+                  data-invalid={visibleFieldErrors.instituteId ? "true" : "false"}
                 >
                   <option value="">
                     {isLoadingInstitutes ? "Loading institutes..." : "Select an institute"}
@@ -494,12 +682,21 @@ export default function UploadPage() {
                     </option>
                   ))}
                 </select>
+                <p id="instituteIdHint" className="brand-field-hint">
+                  Choose the institute that issued, hosted, or officially reviewed
+                  this academic credential.
+                </p>
+                {visibleFieldErrors.instituteId ? (
+                  <p id="instituteIdError" className="brand-field-error" role="alert">
+                    {visibleFieldErrors.instituteId}
+                  </p>
+                ) : null}
               </div>
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-medium text-[#475569]">
-                Certificate File
+              <label className="brand-field-label">
+                Credential Evidence File
               </label>
               <input
                 ref={fileInputRef}
@@ -514,11 +711,25 @@ export default function UploadPage() {
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onClick={() => fileInputRef.current?.click()}
-                className={`cursor-pointer rounded-[34px_18px_34px_18px] border border-dashed px-6 py-14 text-center transition ${
-                  isDragging
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault()
+                    fileInputRef.current?.click()
+                  }
+                }}
+                onBlur={() =>
+                  setTouchedFields((current) => ({ ...current, certificate: true }))
+                }
+                className={`cursor-pointer rounded-[34px_18px_34px_18px] border border-dashed px-6 py-12 text-center transition lg:py-14 ${
+                  visibleFieldErrors.certificate
+                    ? "border-rose-500/45 bg-[rgba(190,24,93,0.06)]"
+                    : isDragging
                     ? "border-[#d25b36]/55 bg-[rgba(210,91,54,0.08)]"
                     : "border-[#101828]/18 bg-[rgba(255,255,255,0.82)] hover:border-[#d25b36]/45 hover:bg-[rgba(255,255,255,0.92)]"
                 }`}
+                role="button"
+                tabIndex={0}
+                aria-describedby="credentialFileHint credentialFileError"
               >
                 <div className="mx-auto mb-5 flex h-[4.5rem] w-[4.5rem] items-center justify-center rounded-[24px] border border-[#101828]/10 bg-[linear-gradient(145deg,rgba(210,91,54,0.14),rgba(131,188,217,0.16))] text-[#3f5065]">
                   <svg
@@ -545,6 +756,15 @@ export default function UploadPage() {
                   Max 10 MB
                 </p>
               </div>
+              <p id="credentialFileHint" className="brand-field-hint">
+                PDF exports are ideal for formal credentials; PNG and JPEG work well
+                for workshop, hackathon, or competition evidence.
+              </p>
+              {visibleFieldErrors.certificate ? (
+                <p id="credentialFileError" className="brand-field-error" role="alert">
+                  {visibleFieldErrors.certificate}
+                </p>
+              ) : null}
             </div>
 
             {selectedFile ? (
@@ -573,51 +793,74 @@ export default function UploadPage() {
             ) : null}
 
             {isSubmitting ? (
-              <div className="rounded-[22px_12px_22px_12px] border border-[#8bbbd5]/25 bg-[#8bbbd5]/10 p-4">
-                <div className="mb-2 flex items-center justify-between text-sm text-[#345166]">
-                  <span>Uploading to IPFS and creating your submission</span>
-                  <span>{uploadProgress}%</span>
-                </div>
-                <div className="h-2 overflow-hidden rounded-full bg-[#d5dbe5]">
-                  <div
-                    className="h-full rounded-full bg-[linear-gradient(90deg,#d25b36,#8bbbd5)] transition-all"
-                    style={{ width: `${uploadProgress}%` }}
-                  />
-                </div>
+              <StatusBanner
+                tone="info"
+                title="Uploading credential evidence"
+                message="DACS is sending the file to IPFS and creating the review-ready submission record."
+                progress={uploadProgress}
+              />
+            ) : submissionStatus ? (
+              <StatusBanner
+                tone={submissionStatus.tone}
+                title={submissionStatus.title}
+                message={submissionStatus.message}
+              />
+            ) : errorMessage ? (
+              <StatusBanner
+                tone="error"
+                title="Upload workspace issue"
+                message={errorMessage}
+              />
+            ) : null}
+
+            {submitAttempted && formSummaryItems.length > 0 ? (
+              <div className="brand-form-summary" role="alert">
+                <div className="brand-form-summary-title">Check The Form</div>
+                <ul className="brand-form-summary-list">
+                  {formSummaryItems.map((message) => (
+                    <li key={message}>{message}</li>
+                  ))}
+                </ul>
               </div>
             ) : null}
 
-            {errorMessage ? (
-              <div className="rounded-[20px] border border-rose-500/25 bg-rose-500/10 px-4 py-3 text-sm text-[#8e314c]">
-                {errorMessage}
-              </div>
-            ) : null}
+            <div className="rounded-[26px_14px_26px_14px] border border-[#101828]/10 bg-[rgba(255,255,255,0.72)] p-4 shadow-[0_12px_28px_rgba(8,12,20,0.05)]">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="max-w-xl">
+                  <div className="text-[11px] uppercase tracking-[0.28em] text-[#6f563f]">
+                    Submission Outcome
+                  </div>
+                  <p className="mt-2 text-sm leading-6 text-[#425168]">
+                    DACS stores the evidence on IPFS, creates a review-ready institute
+                    record, and routes it into the admin verification queue without any
+                    extra student steps.
+                  </p>
+                </div>
 
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <button
-                type="submit"
-                disabled={
-                  !isAuthenticated ||
-                  isSubmitting ||
-                  !selectedFile ||
-                  !courseName.trim() ||
-                  !instituteId
-                }
-                className="brand-button-primary flex-1 px-6 py-4 text-base disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {isSubmitting ? "Submitting..." : "Submit Certificate"}
-              </button>
-              <Link
-                href="/verify"
-                className="brand-button-secondary px-6 py-4 text-center text-base"
-              >
-                Public Verify Portal
-              </Link>
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <button
+                    type="submit"
+                    disabled={
+                      !isAuthenticated ||
+                      isSubmitting
+                    }
+                    className="brand-button-primary flex-1 px-6 py-4 text-base disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isSubmitting ? "Submitting..." : "Submit Credential"}
+                  </button>
+                  <Link
+                    href="/verify"
+                    className="brand-button-secondary px-6 py-4 text-center text-base"
+                  >
+                    Public Verify Portal
+                  </Link>
+                </div>
+              </div>
             </div>
           </form>
         </div>
 
-        <div className="space-y-8">
+        <div className="space-y-6 xl:self-start">
           <div className="brand-panel p-7">
             <div className="mb-5">
               <div className="text-[11px] uppercase tracking-[0.3em] text-[#8bbbd5]">
@@ -631,8 +874,7 @@ export default function UploadPage() {
               <div className="rounded-[22px_12px_22px_12px] border border-[#eedfce]/10 bg-[rgba(255,255,255,0.03)] p-4">
                 <div className="text-sm text-[#8ea0b8]">Current Progress</div>
                 <div className="mt-2 text-[#f7efe3]">
-                  {readinessChecks.filter((check) => check.ready).length} of{" "}
-                  {readinessChecks.length} steps ready for submission
+                  {readinessCount} of {readinessChecks.length} steps ready for submission
                 </div>
               </div>
 
@@ -674,6 +916,13 @@ export default function UploadPage() {
             </div>
           </div>
 
+          <SubmissionStatusCenter
+            submissions={submissions}
+            title="Submission Signals"
+            emptyTitle="No credential signals yet"
+            emptyDescription="Your most important review, rejection, and mint updates will appear here after you submit a credential."
+          />
+
           <div className="brand-panel p-7">
             <div className="mb-5 flex flex-col gap-2">
               <div className="text-[11px] uppercase tracking-[0.3em] text-[#f5c88a]">
@@ -698,15 +947,19 @@ export default function UploadPage() {
                   Loading your submissions...
                 </div>
               ) : submissions.length === 0 ? (
-                <div className="rounded-[22px_12px_22px_12px] border border-[#eedfce]/10 bg-[rgba(255,255,255,0.03)] p-6 text-center">
-                  <h3 className="mb-2 display-serif text-[1.8rem] font-semibold text-[#f7efe3]">
-                    No submissions yet
-                  </h3>
-                  <p className="text-[#b0bccd]">
-                    Your first upload will appear here with its review status, CID,
-                    and minting details.
-                  </p>
-                </div>
+                <EmptyStatePanel
+                  title="No submissions yet"
+                  description="Your first academic credential submission will appear here with its review status, CID, and minting details."
+                  action={
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="brand-button-secondary px-5 py-3 text-sm"
+                    >
+                      Pick Evidence File
+                    </button>
+                  }
+                />
               ) : (
                 submissions.map((submission) => (
                   <div
@@ -714,13 +967,18 @@ export default function UploadPage() {
                     className="rounded-[24px_12px_24px_12px] border border-[#eedfce]/10 bg-[rgba(255,255,255,0.03)] p-5"
                   >
                     <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                      <div>
-                        <h3 className="display-serif text-[1.7rem] font-semibold text-[#f7efe3]">
+                      <div className="min-w-0">
+                        <h3 className="display-serif text-[1.7rem] font-semibold text-[#f7efe3] [overflow-wrap:anywhere]">
                           {submission.courseName}
                         </h3>
-                        <p className="text-sm text-[#b0bccd]">
-                          {submission.instituteName}
-                        </p>
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <p className="text-sm text-[#b0bccd]">
+                            {submission.instituteName}
+                          </p>
+                          <span className="rounded-full border border-[#eedfce]/10 bg-black/20 px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-[#f3d9a2]">
+                            {formatCredentialTypeLabel(submission.credentialType)}
+                          </span>
+                        </div>
                       </div>
                       <span
                         className={`inline-flex w-fit rounded-full border px-3 py-1 text-xs font-medium ${getStatusClasses(submission.status)}`}
@@ -761,7 +1019,7 @@ export default function UploadPage() {
                         rel="noreferrer"
                         className="brand-button-secondary px-4 py-2.5 text-sm"
                       >
-                        Open IPFS File
+                        Open Evidence File
                       </a>
                       {submission.tokenId ? (
                         <Link
@@ -784,6 +1042,38 @@ export default function UploadPage() {
               )}
             </div>
           </div>
+        </div>
+      </div>
+
+      <div className="brand-mobile-action-dock lg:hidden">
+        <div className="brand-mobile-action-dock__inner flex items-center justify-between gap-4 px-4 py-4">
+          <div className="min-w-0">
+            <div className="text-[11px] uppercase tracking-[0.22em] text-[#8ea0b8]">
+              Submission readiness
+            </div>
+            <div className="mt-1 text-sm text-[#f7efe3]">
+              {readinessCount}/{readinessChecks.length} checks complete
+            </div>
+          </div>
+          {isAuthenticated ? (
+            <button
+              type="submit"
+              form="upload-credential-form"
+              disabled={isSubmitting}
+              className="brand-button-primary shrink-0 px-4 py-3 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isSubmitting ? "Submitting..." : "Submit"}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => void connectAndSignIn()}
+              disabled={isAuthenticating}
+              className="brand-button-primary shrink-0 px-4 py-3 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {getWalletSignInLabel(authFlowState, Boolean(connectedWalletAddress))}
+            </button>
+          )}
         </div>
       </div>
     </PageLayout>

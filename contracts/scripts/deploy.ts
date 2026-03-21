@@ -3,8 +3,11 @@ import path from "node:path";
 import { ethers } from "hardhat";
 import hre from "hardhat";
 
-const DEFAULT_BACKEND_SIGNER_PRIVATE_KEY =
-  "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
+const DEFAULT_INSTITUTE_SHORT_CODES = ["IITH", "JNTUH", "OU", "BITS", "NITW"];
+
+function buildInstituteHash(shortCode: string) {
+  return ethers.id(`DACS_INSTITUTE:${shortCode.trim().toUpperCase()}`);
+}
 
 async function writeDeploymentArtifacts(deployment: Record<string, unknown>) {
   const deploymentsDirectory = path.resolve(__dirname, "..", "deployments");
@@ -26,14 +29,15 @@ async function writeDeploymentArtifacts(deployment: Record<string, unknown>) {
 
   const envSnippet = [
     `RPC_URL=http://127.0.0.1:8545`,
-    `BACKEND_SIGNER_PRIVATE_KEY=${DEFAULT_BACKEND_SIGNER_PRIVATE_KEY}`,
-    `ADMIN_WALLET_ADDRESS=${deployment.deployer}`,
+    `ADMIN_WALLET_ADDRESSES=${deployment.admin}`,
     `POCT_ADDRESS=${deployment.poctAddress}`,
     `EDU_ADDRESS=${deployment.eduAddress}`,
     `MINT_CONTROLLER_ADDRESS=${deployment.mintControllerAddress}`,
     `NEXT_PUBLIC_RPC_URL=http://127.0.0.1:8545`,
+    `NEXT_PUBLIC_CHAIN_ID=${deployment.chainId}`,
     `NEXT_PUBLIC_POCT_ADDRESS=${deployment.poctAddress}`,
     `NEXT_PUBLIC_EDU_ADDRESS=${deployment.eduAddress}`,
+    `NEXT_PUBLIC_MINT_CONTROLLER_ADDRESS=${deployment.mintControllerAddress}`,
   ].join("\n");
 
   await fs.writeFile(envSnippetFilePath, `${envSnippet}\n`, "utf8");
@@ -47,8 +51,20 @@ async function main() {
 
   const [deployer] = await ethers.getSigners();
   const network = await ethers.provider.getNetwork();
+  const adminAddress =
+    process.env.MULTISIG_ADMIN_ADDRESS?.trim() || deployer.address;
+  const initialVerifierAddress =
+    process.env.INITIAL_VERIFIER_ADDRESS?.trim() || adminAddress;
+  const instituteShortCodes = (
+    process.env.INITIAL_INSTITUTE_SHORT_CODES ?? DEFAULT_INSTITUTE_SHORT_CODES.join(",")
+  )
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
   console.log("Deploying with account:", deployer.address);
   console.log("Account balance:", (await deployer.provider.getBalance(deployer.address)).toString(), "\n");
+  console.log("Admin address:", adminAddress);
+  console.log("Initial verifier:", initialVerifierAddress, "\n");
 
   // Deploy PoCT
   const PoCT = await ethers.getContractFactory("PoCT");
@@ -65,6 +81,7 @@ async function main() {
   // Deploy MintController
   const MintController = await ethers.getContractFactory("MintController");
   const controller = await MintController.deploy(
+    adminAddress,
     await poct.getAddress(),
     await edu.getAddress()
   );
@@ -75,14 +92,29 @@ async function main() {
   const controllerAddress = await controller.getAddress();
   await poct.setMintController(controllerAddress);
   await edu.setMintController(controllerAddress);
-  await controller.setVerifier(deployer.address, true);
+
+  if (adminAddress.toLowerCase() === deployer.address.toLowerCase()) {
+    for (const shortCode of instituteShortCodes) {
+      await controller.setInstituteVerifier(
+        buildInstituteHash(shortCode),
+        initialVerifierAddress,
+        true
+      );
+    }
+  } else {
+    console.log(
+      "Skipping automatic institute verifier bootstrap because the configured admin is not the deployer."
+    );
+  }
 
   const deployment = {
     network: hre.network.name,
     chainId: Number(network.chainId),
     deployedAt: new Date().toISOString(),
     deployer: deployer.address,
-    verifier: deployer.address,
+    admin: adminAddress,
+    verifier: initialVerifierAddress,
+    instituteShortCodes,
     poctAddress: await poct.getAddress(),
     eduAddress: await edu.getAddress(),
     mintControllerAddress: controllerAddress,
@@ -91,6 +123,9 @@ async function main() {
   await writeDeploymentArtifacts(deployment);
 
   console.log("\n🔗 Contracts connected successfully!");
+  if (adminAddress.toLowerCase() === deployer.address.toLowerCase()) {
+    console.log("🏫 Seed verifier authorization applied for:", instituteShortCodes.join(", "));
+  }
   console.log("🎉 Full System Deployment Complete\n");
 }
 

@@ -44,10 +44,12 @@ coverage/
 
 # Upload/temp files
 backend/uploads/
+backend/private-evidence/
 
 # TypeScript / Turbo / misc caches
 *.tsbuildinfo
 .turbo/
+.playwright-cli/
 
 # Mac / editor files
 .DS_Store

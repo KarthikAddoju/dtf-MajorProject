@@ -1,5 +1,6 @@
 import { InstituteModel } from "../models/Institute";
 import { slugify } from "../lib/validation";
+import { runtimeConfig } from "../config/runtime";
 
 const DEFAULT_INSTITUTES = [
   { name: "Indian Institute of Technology Hyderabad", shortCode: "IITH" },
@@ -10,7 +11,7 @@ const DEFAULT_INSTITUTES = [
 ];
 
 export async function seedDefaultInstitutes() {
-  if (process.env.SEED_DEFAULT_INSTITUTES === "false") {
+  if (!runtimeConfig.seedDefaultInstitutes) {
     return;
   }
 
@@ -25,6 +26,7 @@ export async function seedDefaultInstitutes() {
       ...institute,
       slug: slugify(institute.name),
       isActive: true,
+      verifierAddresses: runtimeConfig.bootstrapVerifierAddresses,
     }))
   );
 

@@ -1,9 +1,11 @@
-export type UserRole = "student" | "admin"
+export type UserRole = "student" | "admin" | "verifier"
 
 export type AuditTrailEventType =
   | "submission_created"
+  | "mint_prepared"
   | "submission_rejected"
   | "submission_minted"
+  | "submission_revoked"
 
 export interface AuditTrailEvent {
   id: string
@@ -20,6 +22,8 @@ export interface AuthUser {
   role: UserRole
 }
 
+export type VerificationStatus = "active" | "expired" | "revoked"
+
 export type AuthFlowState =
   | "idle"
   | "wallet_connected"
@@ -33,6 +37,7 @@ export interface Institute {
   slug: string
   shortCode: string
   isActive: boolean
+  verifierAddresses: string[]
   createdAt: string | null
   updatedAt: string | null
 }
@@ -70,19 +75,29 @@ export interface Submission {
   credentialType: CredentialType
   instituteId: string
   instituteName: string
-  cid: string
+  instituteHash: string
+  evidenceHash: string
+  evidenceUrl: string
+  publicProofCid: string | null
+  publicProofUrl: string | null
+  claimsRoot: string | null
   fileName: string
   mimeType: string
   status: SubmissionStatus
+  verificationStatus: VerificationStatus | null
   eduAmount: number | null
   tokenId: string | null
   txHash: string | null
   verifierAddress: string | null
   reviewNote: string | null
+  expiresAt: string | null
+  revokedAt: string | null
+  revocationReason: string | null
   uploadedAt: string
   reviewedAt: string | null
   mintedAt: string | null
-  ipfsUrl: string
+  cid: string | null
+  ipfsUrl: string | null
   auditTrail: AuditTrailEvent[]
 }
 
@@ -105,10 +120,14 @@ export interface RecentMintActivity {
   studentAddress: string
   verifierAddress: string | null
   eduAmount: number | null
+  evidenceHash: string
+  publicProofCid: string | null
+  publicProofUrl: string | null
+  verificationStatus: VerificationStatus | null
   mintedAt: string
-  cid: string
+  cid: string | null
   txHash: string | null
-  ipfsUrl: string
+  ipfsUrl: string | null
 }
 
 export interface AnalyticsOverview {
@@ -146,17 +165,23 @@ export interface VerificationRecord {
   studentAddress: string
   verifierAddress: string
   issuedAt: string
-  cid: string
+  expiresAt: string | null
+  verificationStatus: VerificationStatus
+  publicProofCid: string
+  claimsRoot: string
+  instituteHash: string
+  evidenceHash: string | null
   courseName: string
   credentialType: CredentialType
   instituteName: string
   eduAmount: number | null
   txHash: string | null
-  ipfsUrl: string
-  fileName: string | null
-  mimeType: string | null
+  publicProofUrl: string | null
   reviewNote: string | null
+  revokedAt?: string | null
+  revocationReason?: string | null
   auditTrail: AuditTrailEvent[]
+  publicProof: Record<string, unknown> | null
   proof: {
     chainId: number
     poctAddress: string
@@ -164,6 +189,10 @@ export interface VerificationRecord {
     mintControllerAddress: string
     soulbound: boolean
   }
+  cid: string
+  ipfsUrl: string | null
+  fileName?: string | null
+  mimeType?: string | null
   standards: {
     note: string
     issuer: {
@@ -200,6 +229,9 @@ export interface PlatformHealth {
     auth: {
       status: "configured" | "warning"
     }
+    evidenceVault: {
+      status: "configured" | "warning"
+    }
   }
   contracts: {
     poctAddress: string
@@ -223,18 +255,46 @@ export interface MintSubmissionInput {
   submissionId: string
   eduAmount: number
   reviewNote?: string
-}
-
-export interface MintSubmissionResult {
-  txHash: string
-  tokenId: string
-  eduAmount: number
-  submissionId: string
+  expiresAt?: string | null
 }
 
 export interface OnChainOwnedCertificate {
   tokenId: string
+  publicProofCid: string
   cid: string
   verifierAddress: string
   issuedAt: string
+  expiresAt: string | null
+  verificationStatus: VerificationStatus
+}
+
+export interface PrepareMintResult {
+  submission: Submission
+  mintPayload: {
+    studentAddress: string
+    publicProofCid: string
+    claimsRoot: string
+    instituteHash: string
+    eduAmountWei: string
+    expiresAt: number
+  }
+}
+
+export interface FinalizeMintResult {
+  submission: Submission
+  txHash: string
+  tokenId: string
+}
+
+export interface RevocationResult {
+  submission: Submission
+}
+
+export interface DisclosurePackage {
+  tokenId: string
+  claimsRoot: string
+  disclosedClaims: Record<string, unknown>
+  merkleProofs: Record<string, string[]>
+  audience: string | null
+  expiresAt: string | null
 }

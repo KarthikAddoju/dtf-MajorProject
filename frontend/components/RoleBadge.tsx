@@ -1,5 +1,5 @@
 interface RoleBadgeProps {
-  role: "student" | "admin"
+  role: "student" | "admin" | "verifier"
 }
 
 export function RoleBadge({ role }: RoleBadgeProps) {
@@ -8,6 +8,8 @@ export function RoleBadge({ role }: RoleBadgeProps) {
       "border border-[#8bbbd5]/20 bg-[#8bbbd5]/10 text-[#d8ebf5] before:bg-[#8bbbd5]",
     admin:
       "border border-[#d25b36]/25 bg-[#d25b36]/10 text-[#ffd7c8] before:bg-[#d25b36]",
+    verifier:
+      "border border-[#b8892d]/25 bg-[#b8892d]/10 text-[#f3d9a2] before:bg-[#b8892d]",
   }
 
   return (

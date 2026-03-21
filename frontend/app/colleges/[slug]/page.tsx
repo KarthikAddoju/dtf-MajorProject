@@ -346,14 +346,16 @@ export default function InstituteProfilePage() {
                             Open Credential Sheet
                           </Link>
                         ) : null}
-                        <a
-                          href={credential.ipfsUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10"
-                        >
-                          Open Evidence File
-                        </a>
+                        {credential.publicProofUrl ? (
+                          <a
+                            href={credential.publicProofUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10"
+                          >
+                            Open Public Proof
+                          </a>
+                        ) : null}
                       </div>
                     </div>
                   ))}

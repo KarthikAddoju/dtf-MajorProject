@@ -2,8 +2,10 @@ import { Router } from "express";
 import { sendError, sendSuccess, handleServerError } from "../lib/api";
 import { InstituteModel } from "../models/Institute";
 import { CertificateSubmissionModel } from "../models/CertificateSubmission";
-import { authenticate, authorize } from "../middleware/authMiddleware";
+import { authenticate, authorize, type AuthRequest } from "../middleware/authMiddleware";
 import { isNonEmptyString, isOptionalString, isValidObjectId, slugify } from "../lib/validation";
+import { uniqueWalletAddresses } from "../lib/institutes";
+import { toSubmissionResponse } from "../lib/submissionResponses";
 
 const router = Router();
 
@@ -13,6 +15,7 @@ function toInstituteResponse(institute: {
   slug: string;
   shortCode: string;
   isActive: boolean;
+  verifierAddresses?: string[];
   createdAt?: Date;
   updatedAt?: Date;
 }) {
@@ -22,6 +25,7 @@ function toInstituteResponse(institute: {
     slug: institute.slug,
     shortCode: institute.shortCode,
     isActive: institute.isActive,
+    verifierAddresses: institute.verifierAddresses ?? [],
     createdAt: institute.createdAt?.toISOString() ?? null,
     updatedAt: institute.updatedAt?.toISOString() ?? null,
   };
@@ -203,20 +207,11 @@ router.get("/:slug/profile", async (req, res) => {
         },
         topCourses: topCourseRows,
         recentCredentials: recentCredentialRows.map((submission) => ({
-          id: String(submission._id),
-          tokenId: submission.tokenId ?? null,
-          courseName: submission.courseName,
-          credentialType: submission.credentialType ?? "course",
-          studentAddress: submission.studentAddress,
-          verifierAddress: submission.verifierAddress ?? null,
-          eduAmount: submission.eduAmount ?? null,
+          ...toSubmissionResponse(submission as never),
           mintedAt:
             submission.mintedAt?.toISOString() ??
             submission.reviewedAt?.toISOString() ??
             submission.uploadedAt.toISOString(),
-          cid: submission.cid,
-          txHash: submission.txHash ?? null,
-          ipfsUrl: `https://ipfs.io/ipfs/${submission.cid}`,
         })),
       },
     });
@@ -225,11 +220,12 @@ router.get("/:slug/profile", async (req, res) => {
   }
 });
 
-router.post("/", authenticate, authorize("admin"), async (req, res) => {
+router.post("/", authenticate, authorize("admin"), async (req: AuthRequest, res) => {
   try {
-    const { name, shortCode } = req.body as {
+    const { name, shortCode, verifierAddresses } = req.body as {
       name?: string;
       shortCode?: string;
+      verifierAddresses?: string[];
     };
 
     if (!isNonEmptyString(name) || !isNonEmptyString(shortCode)) {
@@ -272,6 +268,10 @@ router.post("/", authenticate, authorize("admin"), async (req, res) => {
       slug: instituteSlug,
       shortCode: normalizedShortCode,
       isActive: true,
+      verifierAddresses: uniqueWalletAddresses([
+        ...(Array.isArray(verifierAddresses) ? verifierAddresses : []),
+        ...(req.user?.address ? [req.user.address] : []),
+      ]),
     });
 
     return sendSuccess(
@@ -292,16 +292,20 @@ router.patch("/:id", authenticate, authorize("admin"), async (req, res) => {
       return sendError(res, 400, "VALIDATION_ERROR", "Invalid institute id");
     }
 
-    const { name, shortCode, isActive } = req.body as {
+    const { name, shortCode, isActive, verifierAddresses } = req.body as {
       name?: string;
       shortCode?: string;
       isActive?: boolean;
+      verifierAddresses?: string[];
     };
 
     if (
       !isOptionalString(name) ||
       !isOptionalString(shortCode) ||
-      (isActive !== undefined && typeof isActive !== "boolean")
+      (isActive !== undefined && typeof isActive !== "boolean") ||
+      (verifierAddresses !== undefined &&
+        (!Array.isArray(verifierAddresses) ||
+          verifierAddresses.some((entry) => typeof entry !== "string")))
     ) {
       return sendError(
         res,
@@ -345,6 +349,10 @@ router.patch("/:id", authenticate, authorize("admin"), async (req, res) => {
 
     if (typeof isActive === "boolean") {
       institute.isActive = isActive;
+    }
+
+    if (Array.isArray(verifierAddresses)) {
+      institute.verifierAddresses = uniqueWalletAddresses(verifierAddresses);
     }
 
     await institute.save();

@@ -24,6 +24,7 @@ import {
   isAbortError,
   uploadCertificate,
 } from "@/lib/api"
+import { openPrivateEvidence } from "@/lib/evidence"
 import { formatCredentialTypeLabel } from "@/lib/formatting"
 import { getWalletSignInLabel } from "@/lib/wallet"
 import type {
@@ -284,6 +285,26 @@ export default function UploadPage() {
     setIsDragging(false)
   }
 
+  async function handleOpenEvidence(submission: Submission) {
+    if (!token) {
+      return
+    }
+
+    try {
+      await openPrivateEvidence(token, submission.id, submission.fileName)
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Could not open the private evidence file"
+      setSubmissionStatus({
+        tone: "error",
+        title: "Evidence unavailable",
+        message,
+      })
+    }
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
@@ -362,7 +383,7 @@ export default function UploadPage() {
         tone: "success",
         title: "Credential submitted",
         message:
-          "Your evidence is now stored in IPFS and the submission has entered the admin review queue.",
+          "Your evidence is now stored in the encrypted evidence vault and the submission has entered the reviewer queue.",
       })
     } catch (error) {
       const message =
@@ -491,7 +512,7 @@ export default function UploadPage() {
               <span className="brand-chip-light">Guest session</span>
             )}
             <span className="brand-chip-light">
-              IPFS Storage
+              Private Evidence Vault
             </span>
             <span className="brand-chip-light">MongoDB Workflow</span>
           </div>
@@ -508,7 +529,7 @@ export default function UploadPage() {
             {[
               "Upload the original evidence file from your local system.",
               "Attach the right credential title, type, and institute before submission.",
-              "Create an IPFS-backed credential record that enters the admin review queue.",
+              "Create a private encrypted evidence record that enters the reviewer queue.",
               "Track approval, mint outcome, token ID, and EDU reward live.",
             ].map((step, index) => (
               <div
@@ -542,8 +563,8 @@ export default function UploadPage() {
               </h2>
               <p className="max-w-2xl text-[#c8d0de]">
                 Uploads are bound to your wallet identity so the backend can store a
-                real student submission record and the admin can mint directly to the
-                correct address.
+                real student submission record and an authorized reviewer can mint
+                directly to the correct address from their own wallet.
               </p>
             </div>
             <button
@@ -796,7 +817,7 @@ export default function UploadPage() {
               <StatusBanner
                 tone="info"
                 title="Uploading credential evidence"
-                message="DACS is sending the file to IPFS and creating the review-ready submission record."
+                message="DACS is encrypting the file and creating the review-ready submission record."
                 progress={uploadProgress}
               />
             ) : submissionStatus ? (
@@ -831,9 +852,9 @@ export default function UploadPage() {
                     Submission Outcome
                   </div>
                   <p className="mt-2 text-sm leading-6 text-[#425168]">
-                    DACS stores the evidence on IPFS, creates a review-ready institute
-                    record, and routes it into the admin verification queue without any
-                    extra student steps.
+                    DACS encrypts the evidence, creates a review-ready institute
+                    record, and routes it into the reviewer verification queue without
+                    any extra student steps.
                   </p>
                 </div>
 
@@ -908,9 +929,9 @@ export default function UploadPage() {
                   What Happens Next
                 </div>
                 <div className="mt-3 space-y-3 text-sm text-[#d8e0ec]">
-                  <div>1. Your file is uploaded to IPFS and linked to your wallet.</div>
+                  <div>1. Your file is encrypted and linked to your wallet.</div>
                   <div>2. The submission enters the institute review queue.</div>
-                  <div>3. Once approved, DACS mints the credential NFT and EDU reward.</div>
+                  <div>3. Once approved, an authorized reviewer mints the credential NFT and EDU reward.</div>
                 </div>
               </div>
             </div>
@@ -936,8 +957,8 @@ export default function UploadPage() {
               <div className="rounded-[22px_12px_22px_12px] border border-[#eedfce]/10 bg-[rgba(255,255,255,0.03)] p-4">
                 <div className="text-sm text-[#8ea0b8]">Workflow</div>
                 <div className="mt-2 text-[#f7efe3]">
-                  Upload <span className="text-slate-500">→</span> IPFS{" "}
-                  <span className="text-slate-500">→</span> Admin Review{" "}
+                  Upload <span className="text-slate-500">→</span> Private Vault{" "}
+                  <span className="text-slate-500">→</span> Reviewer Queue{" "}
                   <span className="text-slate-500">→</span> NFT + EDU Mint
                 </div>
               </div>
@@ -949,7 +970,7 @@ export default function UploadPage() {
               ) : submissions.length === 0 ? (
                 <EmptyStatePanel
                   title="No submissions yet"
-                  description="Your first academic credential submission will appear here with its review status, CID, and minting details."
+                  description="Your first academic credential submission will appear here with its review status, evidence hash, and minting details."
                   action={
                     <button
                       type="button"
@@ -989,11 +1010,19 @@ export default function UploadPage() {
 
                     <dl className="space-y-2 text-sm text-[#d8e0ec]">
                       <div className="flex items-center justify-between gap-4">
-                        <dt className="text-[#8ea0b8]">CID</dt>
+                        <dt className="text-[#8ea0b8]">Evidence Hash</dt>
                         <dd className="font-mono text-right text-[#d5e7f1]">
-                          {truncateValue(submission.cid)}
+                          {truncateValue(submission.evidenceHash)}
                         </dd>
                       </div>
+                      {submission.publicProofCid ? (
+                        <div className="flex items-center justify-between gap-4">
+                          <dt className="text-[#8ea0b8]">Public Proof CID</dt>
+                          <dd className="font-mono text-right text-[#d5e7f1]">
+                            {truncateValue(submission.publicProofCid)}
+                          </dd>
+                        </div>
+                      ) : null}
                       <div className="flex items-center justify-between gap-4">
                         <dt className="text-[#8ea0b8]">Uploaded</dt>
                         <dd>{formatDate(submission.uploadedAt)}</dd>
@@ -1013,14 +1042,13 @@ export default function UploadPage() {
                     </dl>
 
                     <div className="mt-4 flex flex-wrap gap-3">
-                      <a
-                        href={submission.ipfsUrl}
-                        target="_blank"
-                        rel="noreferrer"
+                      <button
+                        type="button"
+                        onClick={() => void handleOpenEvidence(submission)}
                         className="brand-button-secondary px-4 py-2.5 text-sm"
                       >
-                        Open Evidence File
-                      </a>
+                        Open Private Evidence
+                      </button>
                       {submission.tokenId ? (
                         <Link
                           href={`/verify?tokenId=${submission.tokenId}`}
@@ -1033,7 +1061,7 @@ export default function UploadPage() {
 
                     {submission.reviewNote ? (
                       <div className="mt-4 rounded-[18px] border border-[#eedfce]/10 bg-[rgba(255,255,255,0.03)] p-3 text-sm text-[#d8e0ec]">
-                        <span className="text-[#8ea0b8]">Admin Note:</span>{" "}
+                        <span className="text-[#8ea0b8]">Reviewer Note:</span>{" "}
                         {submission.reviewNote}
                       </div>
                     ) : null}

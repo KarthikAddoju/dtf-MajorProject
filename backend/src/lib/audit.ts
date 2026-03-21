@@ -2,8 +2,10 @@ import { Types } from "mongoose";
 
 export const AUDIT_TRAIL_EVENT_TYPES = [
   "submission_created",
+  "mint_prepared",
   "submission_rejected",
   "submission_minted",
+  "submission_revoked",
 ] as const;
 
 export type AuditTrailEventType = (typeof AUDIT_TRAIL_EVENT_TYPES)[number];

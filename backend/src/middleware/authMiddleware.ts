@@ -1,8 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
+import { runtimeConfig } from "../config/runtime";
 import { sendError } from "../lib/api";
-
-const JWT_SECRET = process.env.JWT_SECRET ?? "supersecret";
 
 export interface AuthTokenPayload extends jwt.JwtPayload {
   address: string;
@@ -31,7 +30,7 @@ export const authenticate = (
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, runtimeConfig.jwtSecret);
 
     if (
       typeof decoded === "string" ||
@@ -48,9 +47,9 @@ export const authenticate = (
   }
 };
 
-export const authorize = (role: string) => {
+export const authorize = (...roles: string[]) => {
   return (req: AuthRequest, res: Response, next: NextFunction) => {
-    if (req.user?.role !== role) {
+    if (!req.user || !roles.includes(req.user.role)) {
       return sendError(res, 403, "FORBIDDEN", "Forbidden");
     }
     next();

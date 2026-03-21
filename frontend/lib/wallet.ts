@@ -1,4 +1,5 @@
 import { BrowserProvider, type JsonRpcSigner } from "ethers"
+import { CHAIN_ID, RPC_URL } from "@/lib/config"
 import type { AuthFlowState } from "@/lib/types"
 
 interface EthereumProviderLike {
@@ -67,16 +68,16 @@ export function isWalletActionRejected(error: unknown) {
   )
 }
 
-const SUPPORTED_CHAIN_IDS = new Set([1337, 31337])
+const SUPPORTED_CHAIN_IDS = new Set([CHAIN_ID])
 const HARDHAT_CHAIN_PARAMETERS = {
-  chainId: "0x7a69",
-  chainName: "Hardhat Localhost",
+  chainId: `0x${CHAIN_ID.toString(16)}`,
+  chainName: "DACS Local Chain",
   nativeCurrency: {
     name: "Ethereum",
     symbol: "ETH",
     decimals: 18,
   },
-  rpcUrls: ["http://127.0.0.1:8545"],
+  rpcUrls: [RPC_URL],
 }
 
 export function isSupportedChainId(chainId: number | null) {
@@ -89,7 +90,7 @@ export function getWalletNetworkLabel(chainId: number | null) {
   }
 
   if (SUPPORTED_CHAIN_IDS.has(chainId)) {
-    return "Hardhat Localhost"
+    return "DACS Local Chain"
   }
 
   return `Unsupported Chain (${chainId})`
@@ -170,7 +171,7 @@ async function buildWalletSnapshot(provider: BrowserProvider) {
   }
 }
 
-async function trySwitchToHardhatNetwork() {
+async function trySwitchToConfiguredNetwork() {
   const ethereum = ensureEthereumProvider()
 
   try {
@@ -190,7 +191,7 @@ async function trySwitchToHardhatNetwork() {
     }
 
     throw new WalletConnectionError(
-      "Please switch MetaMask to the Hardhat localhost network.",
+      "Please switch MetaMask to the configured DACS network.",
       "UNSUPPORTED_NETWORK"
     )
   }
@@ -217,13 +218,13 @@ export async function connectWallet(): Promise<ConnectedWallet> {
   let wallet = await buildWalletSnapshot(provider)
 
   if (!wallet.isSupportedNetwork) {
-    await trySwitchToHardhatNetwork()
+    await trySwitchToConfiguredNetwork()
     wallet = await buildWalletSnapshot(new BrowserProvider(ensureEthereumProvider()))
   }
 
   if (!wallet.isSupportedNetwork) {
     throw new WalletConnectionError(
-      "Please switch MetaMask to the Hardhat localhost network.",
+      "Please switch MetaMask to the configured DACS network.",
       "UNSUPPORTED_NETWORK"
     )
   }

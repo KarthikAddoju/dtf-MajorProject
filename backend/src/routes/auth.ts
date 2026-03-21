@@ -2,24 +2,37 @@ import { randomBytes } from "node:crypto";
 import { Router } from "express";
 import { isAddress, verifyMessage } from "ethers";
 import jwt from "jsonwebtoken";
+import { runtimeConfig, isAdminWallet, isBootstrapVerifierWallet } from "../config/runtime";
 import { authenticate, type AuthRequest } from "../middleware/authMiddleware";
 import { sendError, sendSuccess } from "../lib/api";
+import { LoginChallengeModel } from "../models/LoginChallenge";
+import { InstituteModel } from "../models/Institute";
+import { normalizeWalletAddress } from "../lib/institutes";
 
 const router = Router();
-
-const JWT_SECRET = process.env.JWT_SECRET ?? "supersecret";
-const ADMIN_ADDRESS =
-  process.env.ADMIN_WALLET_ADDRESS?.toLowerCase() ??
-  "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266";
 const CHALLENGE_TTL_MS = 5 * 60 * 1000;
-const loginChallenges = new Map<string, { message: string; expiresAt: number }>();
 
-function normalizeAddress(address: string) {
-  return address.toLowerCase();
+async function resolveUserRole(address: string) {
+  const normalizedAddress = normalizeWalletAddress(address);
+
+  if (isAdminWallet(normalizedAddress)) {
+    return "admin" as const;
+  }
+
+  if (isBootstrapVerifierWallet(normalizedAddress)) {
+    return "verifier" as const;
+  }
+
+  const institute = await InstituteModel.findOne({
+    verifierAddresses: normalizedAddress,
+  })
+    .select("_id")
+    .lean();
+
+  return institute ? ("verifier" as const) : ("student" as const);
 }
 
-// Step 1: Generate login challenge
-router.post("/challenge", (req, res) => {
+router.post("/challenge", async (req, res) => {
   const { address } = req.body;
 
   if (typeof address !== "string" || !isAddress(address)) {
@@ -31,20 +44,33 @@ router.post("/challenge", (req, res) => {
     );
   }
 
-  const normalizedAddress = normalizeAddress(address);
+  const normalizedAddress = normalizeWalletAddress(address);
   const message = [
     `Login to DACS with wallet: ${normalizedAddress}`,
     `Nonce: ${randomBytes(16).toString("hex")}`,
   ].join("\n");
-  const expiresAt = Date.now() + CHALLENGE_TTL_MS;
+  const expiresAt = new Date(Date.now() + CHALLENGE_TTL_MS);
 
-  loginChallenges.set(normalizedAddress, { message, expiresAt });
+  await LoginChallengeModel.deleteMany({
+    address: normalizedAddress,
+    consumedAt: null,
+  });
 
-  return sendSuccess(res, { message, expiresAt });
+  await LoginChallengeModel.create({
+    address: normalizedAddress,
+    message,
+    ipAddress: req.ip,
+    userAgent:
+      typeof req.headers["user-agent"] === "string"
+        ? req.headers["user-agent"]
+        : undefined,
+    expiresAt,
+  });
+
+  return sendSuccess(res, { message, expiresAt: expiresAt.getTime() });
 });
 
-// Step 2: Verify signature
-router.post("/verify", (req, res) => {
+router.post("/verify", async (req, res) => {
   const { address, signature, message } = req.body;
 
   if (
@@ -61,10 +87,14 @@ router.post("/verify", (req, res) => {
     );
   }
 
-  const normalizedAddress = normalizeAddress(address);
-  const pendingChallenge = loginChallenges.get(normalizedAddress);
+  const normalizedAddress = normalizeWalletAddress(address);
+  const pendingChallenge = await LoginChallengeModel.findOne({
+    address: normalizedAddress,
+    message,
+    consumedAt: null,
+  }).sort({ createdAt: -1 });
 
-  if (!pendingChallenge || pendingChallenge.message !== message) {
+  if (!pendingChallenge) {
     return sendError(
       res,
       401,
@@ -73,15 +103,14 @@ router.post("/verify", (req, res) => {
     );
   }
 
-  if (pendingChallenge.expiresAt < Date.now()) {
-    loginChallenges.delete(normalizedAddress);
+  if (pendingChallenge.expiresAt.getTime() < Date.now()) {
     return sendError(res, 401, "CHALLENGE_EXPIRED", "Challenge expired");
   }
 
   let recoveredAddress: string;
 
   try {
-    recoveredAddress = normalizeAddress(verifyMessage(message, signature));
+    recoveredAddress = normalizeWalletAddress(verifyMessage(message, signature));
   } catch {
     return sendError(res, 401, "INVALID_SIGNATURE", "Invalid signature");
   }
@@ -90,12 +119,13 @@ router.post("/verify", (req, res) => {
     return sendError(res, 401, "INVALID_SIGNATURE", "Invalid signature");
   }
 
-  loginChallenges.delete(normalizedAddress);
+  pendingChallenge.consumedAt = new Date();
+  await pendingChallenge.save();
 
-  const role = normalizedAddress === ADMIN_ADDRESS ? "admin" : "student";
+  const role = await resolveUserRole(normalizedAddress);
   const token = jwt.sign(
     { address: normalizedAddress, role },
-    JWT_SECRET,
+    runtimeConfig.jwtSecret,
     { expiresIn: "1h" }
   );
 

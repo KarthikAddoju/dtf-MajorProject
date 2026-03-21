@@ -5,11 +5,14 @@ import type {
   AnalyticsOverview,
   AuthUser,
   CollegeLeaderboardEntry,
+  DisclosurePackage,
+  FinalizeMintResult,
   Institute,
   InstituteProfile,
   MintSubmissionInput,
-  MintSubmissionResult,
   PlatformHealth,
+  PrepareMintResult,
+  RevocationResult,
   Submission,
   UploadSubmissionInput,
   UploadSubmissionResult,
@@ -248,8 +251,48 @@ export async function rejectSubmission(
   })
 }
 
-export async function mintSubmission(token: string, input: MintSubmissionInput) {
-  return apiRequest<MintSubmissionResult>("/api/mint", {
+export async function prepareMintSubmission(
+  token: string,
+  input: MintSubmissionInput
+) {
+  return apiRequest<PrepareMintResult>(
+    `/api/reviews/${input.submissionId}/prepare-mint`,
+    {
+      method: "POST",
+      token,
+      body: {
+        eduAmount: input.eduAmount,
+        reviewNote: input.reviewNote,
+        expiresAt: input.expiresAt ?? undefined,
+      },
+    }
+  )
+}
+
+export async function finalizeMintSubmission(
+  token: string,
+  submissionId: string,
+  txHash: string
+) {
+  return apiRequest<FinalizeMintResult>(
+    `/api/reviews/${submissionId}/finalize-mint`,
+    {
+      method: "POST",
+      token,
+      body: { txHash },
+    }
+  )
+}
+
+export async function finalizeCredentialRevocation(
+  token: string,
+  tokenId: string,
+  input: {
+    txHash: string
+    reason: string
+  }
+) {
+  return apiRequest<RevocationResult>(`/api/credentials/${tokenId}/revoke/finalize`, {
     method: "POST",
     token,
     body: input,
@@ -281,6 +324,49 @@ export async function fetchPlatformHealth(signal?: AbortSignal) {
   return apiRequest<PlatformHealth>("/api/health", {
     signal,
   })
+}
+
+export async function createDisclosurePackage(
+  token: string,
+  tokenId: string,
+  input?: {
+    claimKeys?: string[]
+    audience?: string
+    expiresAt?: string
+  }
+) {
+  return apiRequest<DisclosurePackage>(`/api/credentials/${tokenId}/disclosures`, {
+    method: "POST",
+    token,
+    body: input ?? {},
+  })
+}
+
+export async function fetchEvidenceBlob(
+  token: string,
+  submissionId: string,
+  options?: {
+    download?: boolean
+    signal?: AbortSignal
+  }
+) {
+  const response = await fetch(
+    buildBackendUrl(
+      `/api/evidence/${submissionId}${options?.download ? "?download=1" : ""}`
+    ),
+    {
+      method: "GET",
+      headers: buildHeaders(token),
+      cache: "no-store",
+      signal: options?.signal,
+    }
+  )
+
+  if (!response.ok) {
+    await parseApiResponse(response, "Could not load evidence")
+  }
+
+  return response.blob()
 }
 
 export async function uploadCertificate(

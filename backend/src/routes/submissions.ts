@@ -1,72 +1,23 @@
 import { Router } from "express";
 import { sendError, sendSuccess, handleServerError } from "../lib/api";
-import { createAuditTrailEvent, toAuditTrailResponse } from "../lib/audit";
-import {
-  CREDENTIAL_TYPES,
-  CERTIFICATE_STATUSES,
-  CertificateSubmissionModel,
-} from "../models/CertificateSubmission";
+import { createAuditTrailEvent } from "../lib/audit";
+import { CertificateSubmissionModel } from "../models/CertificateSubmission";
 import { authenticate, authorize, type AuthRequest } from "../middleware/authMiddleware";
 import { isOptionalString, isValidObjectId } from "../lib/validation";
+import { buildReviewerSubmissionScope, assertInstituteReviewerAccess } from "../lib/reviewers";
+import { toSubmissionResponse } from "../lib/submissionResponses";
 
 const router = Router();
 
-function toSubmissionResponse(submission: {
-  _id: unknown;
-  studentAddress: string;
-  courseName: string;
-  credentialType?: (typeof CREDENTIAL_TYPES)[number];
-  instituteId: unknown;
-  instituteName: string;
-  cid: string;
-  fileName: string;
-  mimeType: string;
-  status: (typeof CERTIFICATE_STATUSES)[number];
-  eduAmount?: number;
-  tokenId?: string;
-  txHash?: string;
-  verifierAddress?: string;
-  reviewNote?: string;
-  uploadedAt: Date;
-  reviewedAt?: Date;
-  mintedAt?: Date;
-  auditTrail?: Array<{
-    _id?: unknown;
-    type: "submission_created" | "submission_rejected" | "submission_minted";
-    title: string;
-    description?: string;
-    actorAddress?: string;
-    createdAt: Date;
-    metadata?: Record<string, unknown>;
-  }>;
-}) {
-  return {
-    id: String(submission._id),
-    studentAddress: submission.studentAddress,
-    courseName: submission.courseName,
-    credentialType: submission.credentialType ?? "course",
-    instituteId: String(submission.instituteId),
-    instituteName: submission.instituteName,
-    cid: submission.cid,
-    fileName: submission.fileName,
-    mimeType: submission.mimeType,
-    status: submission.status,
-    eduAmount: submission.eduAmount ?? null,
-    tokenId: submission.tokenId ?? null,
-    txHash: submission.txHash ?? null,
-    verifierAddress: submission.verifierAddress ?? null,
-    reviewNote: submission.reviewNote ?? null,
-    uploadedAt: submission.uploadedAt.toISOString(),
-    reviewedAt: submission.reviewedAt?.toISOString() ?? null,
-    mintedAt: submission.mintedAt?.toISOString() ?? null,
-    ipfsUrl: `https://ipfs.io/ipfs/${submission.cid}`,
-    auditTrail: (submission.auditTrail ?? []).map(toAuditTrailResponse),
-  };
-}
-
-router.get("/", authenticate, authorize("admin"), async (_req, res) => {
+router.get("/", authenticate, authorize("admin", "verifier"), async (req: AuthRequest, res) => {
   try {
-    const submissions = await CertificateSubmissionModel.find()
+    const reviewerScope = await buildReviewerSubmissionScope(req.user);
+
+    if (reviewerScope === null) {
+      return sendError(res, 403, "FORBIDDEN", "Forbidden");
+    }
+
+    const submissions = await CertificateSubmissionModel.find(reviewerScope)
       .sort({ uploadedAt: -1 })
       .lean();
 
@@ -98,9 +49,16 @@ router.get("/me", authenticate, async (req: AuthRequest, res) => {
   }
 });
 
-router.get("/pending", authenticate, authorize("admin"), async (_req, res) => {
+router.get("/pending", authenticate, authorize("admin", "verifier"), async (req: AuthRequest, res) => {
   try {
+    const reviewerScope = await buildReviewerSubmissionScope(req.user);
+
+    if (reviewerScope === null) {
+      return sendError(res, 403, "FORBIDDEN", "Forbidden");
+    }
+
     const submissions = await CertificateSubmissionModel.find({
+      ...reviewerScope,
       status: "pending_review",
     })
       .sort({ uploadedAt: 1 })
@@ -117,7 +75,7 @@ router.get("/pending", authenticate, authorize("admin"), async (_req, res) => {
 router.post(
   "/:id/reject",
   authenticate,
-  authorize("admin"),
+  authorize("admin", "verifier"),
   async (req: AuthRequest, res) => {
     try {
       const id = String(req.params.id);
@@ -147,6 +105,15 @@ router.post(
         );
       }
 
+      const canReview = await assertInstituteReviewerAccess(
+        req.user,
+        submission.instituteId
+      );
+
+      if (!canReview) {
+        return sendError(res, 403, "FORBIDDEN", "Forbidden");
+      }
+
       if (submission.status !== "pending_review") {
         return sendError(
           res,
@@ -166,7 +133,7 @@ router.post(
           title: "Submission rejected",
           description:
             reviewNote?.trim() ||
-            "The certificate submission was rejected during admin review.",
+            "The certificate submission was rejected during reviewer review.",
           actorAddress: req.user?.address,
           metadata: {
             status: "rejected",
@@ -184,5 +151,4 @@ router.post(
   }
 );
 
-export { toSubmissionResponse };
 export default router;

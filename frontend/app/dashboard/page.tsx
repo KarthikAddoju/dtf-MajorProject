@@ -15,6 +15,7 @@ import { useAuth } from "@/components/AuthProvider"
 import { fetchMySubmissions, isAbortError } from "@/lib/api"
 import { getEduBalance } from "@/lib/contracts/edu"
 import { getOwnedCertificates } from "@/lib/contracts/poct"
+import { openPrivateEvidence } from "@/lib/evidence"
 import { getWalletSignInLabel } from "@/lib/wallet"
 import {
   formatCredentialTypeLabel,
@@ -58,12 +59,12 @@ function getPassportHeadline(input: {
     }
   }
 
-  return {
-    title: "This passport is ready for its first verified credential.",
-    description:
-      "Connect your latest academic evidence to the DACS review rail, then let the admin flow turn it into a minted public credential with EDU attached.",
-    ctaHref: "/upload",
-    ctaLabel: "Start Credential Submission",
+    return {
+      title: "This passport is ready for its first verified credential.",
+      description:
+        "Connect your latest academic evidence to the DACS review rail, then let the reviewer flow turn it into a minted public credential with EDU attached.",
+      ctaHref: "/upload",
+      ctaLabel: "Start Credential Submission",
   }
 }
 
@@ -215,6 +216,22 @@ export default function DashboardPage() {
     },
   ]
 
+  async function handleOpenEvidence(submission: Submission) {
+    if (!token) {
+      return
+    }
+
+    try {
+      await openPrivateEvidence(token, submission.id, submission.fileName)
+    } catch (error) {
+      setDataWarning(
+        error instanceof Error
+          ? error.message
+          : "Could not open the private evidence file"
+      )
+    }
+  }
+
   return (
     <PageLayout>
       <section className="mb-8 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
@@ -293,7 +310,7 @@ export default function DashboardPage() {
           <div className="mb-8 rounded-[24px_12px_24px_12px] border border-[#b8892d]/25 bg-[#b8892d]/10 px-5 py-4 text-sm text-[#f3d9a2]">
             Minted credentials automatically become public proof artifacts after
             approval. Use the verification sheet to access shareable exports,
-            standards files, and evidence anchors in one place.
+            standards files, and proof anchors in one place.
           </div>
 
           <section className="mb-10 grid gap-8 xl:grid-cols-[1.02fr_0.98fr] xl:items-start">
@@ -454,7 +471,7 @@ export default function DashboardPage() {
                 <EmptyStatePanel
                   eyebrow="Minting has not started"
                   title="No on-chain credentials yet"
-                  description="Submit academic credential evidence and wait for admin approval to mint your first PoCT credential."
+                  description="Submit academic credential evidence and wait for reviewer approval to mint your first PoCT credential."
                   action={
                     <Link
                       href="/upload"
@@ -504,9 +521,15 @@ export default function DashboardPage() {
                             <span>{formatDateTime(certificate.issuedAt)}</span>
                           </div>
                           <div className="flex items-center justify-between gap-3">
-                            <span className="text-slate-500">CID</span>
+                            <span className="text-slate-500">Proof CID</span>
                             <span className="font-mono text-[#d5e7f1]">
                               {truncateValue(certificate.cid, 12, 10)}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-slate-500">Status</span>
+                            <span className="capitalize">
+                              {certificate.verificationStatus}
                             </span>
                           </div>
                           <div className="flex items-center justify-between gap-3">
@@ -527,18 +550,20 @@ export default function DashboardPage() {
 
                         <div className="mt-4 rounded-2xl border border-[#b8892d]/20 bg-[#b8892d]/8 p-3 text-sm text-[#f3d9a2]">
                           VC JSON-LD and Open Badge exports are ready on the public
-                          verification sheet for this credential.
+                          verification sheet for this credential. Private evidence
+                          stays behind authenticated access.
                         </div>
 
                         <div className="mt-5 flex flex-wrap gap-3">
-                          <a
-                            href={submission?.ipfsUrl ?? `https://ipfs.io/ipfs/${certificate.cid}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="rounded-lg border border-white/10 px-4 py-2 text-sm text-white transition hover:bg-white/10"
-                          >
-                            Open Evidence File
-                          </a>
+                          {submission ? (
+                            <button
+                              type="button"
+                              onClick={() => void handleOpenEvidence(submission)}
+                              className="rounded-lg border border-white/10 px-4 py-2 text-sm text-white transition hover:bg-white/10"
+                            >
+                              Open Private Evidence
+                            </button>
+                          ) : null}
                           <Link
                             href={`/verify?tokenId=${certificate.tokenId}`}
                             className="brand-button-primary px-4 py-2.5 text-sm"
@@ -633,14 +658,13 @@ export default function DashboardPage() {
                         </div>
 
                         <div className="mt-4 flex flex-wrap gap-3">
-                          <a
-                            href={submission.ipfsUrl}
-                            target="_blank"
-                            rel="noreferrer"
+                          <button
+                            type="button"
+                            onClick={() => void handleOpenEvidence(submission)}
                             className="rounded-lg border border-white/10 px-4 py-2 text-sm text-white transition hover:bg-white/10"
                           >
-                            Open Evidence File
-                          </a>
+                            Open Private Evidence
+                          </button>
                           {submission.tokenId ? (
                             <Link
                               href={`/verify?tokenId=${submission.tokenId}`}
@@ -654,7 +678,8 @@ export default function DashboardPage() {
                         {submission.status === "minted" && submission.tokenId ? (
                           <div className="mt-4 rounded-2xl border border-[#0f766e]/24 bg-[#0f766e]/10 p-3 text-sm text-[#c9f0e7]">
                             This minted credential now has a public proof page plus
-                            automatic VC and Open Badge downloads.
+                            automatic VC and Open Badge downloads while the source
+                            evidence remains private.
                           </div>
                         ) : null}
 

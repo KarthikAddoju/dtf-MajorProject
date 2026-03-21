@@ -1,6 +1,7 @@
 import { Router } from "express";
 import mongoose from "mongoose";
 import { sendSuccess } from "../lib/api";
+import { runtimeConfig } from "../config/runtime";
 import {
   eduAddress,
   mintControllerAddress,
@@ -26,14 +27,8 @@ function getDatabaseStateLabel(readyState: number) {
 router.get("/", async (_req, res) => {
   const checkedAt = new Date().toISOString();
   const databaseState = getDatabaseStateLabel(mongoose.connection.readyState);
-  const ipfsConfigured =
-    typeof process.env.PINATA_JWT === "string" &&
-    process.env.PINATA_JWT.trim().length > 0 &&
-    process.env.PINATA_JWT !== "your-pinata-jwt";
-  const authConfigured =
-    typeof process.env.JWT_SECRET === "string" &&
-    process.env.JWT_SECRET.trim().length > 0 &&
-    process.env.JWT_SECRET !== "change-me";
+  const ipfsConfigured = runtimeConfig.pinataJwt !== null;
+  const authConfigured = runtimeConfig.jwtSecret.trim().length > 0;
 
   let blockchainStatus: "connected" | "degraded" = "degraded";
   let chainId: number | null = null;
@@ -78,6 +73,12 @@ router.get("/", async (_req, res) => {
       },
       auth: {
         status: authConfigured ? "configured" : "warning",
+      },
+      evidenceVault: {
+        status:
+          runtimeConfig.evidenceEncryptionKey.length === 32
+            ? "configured"
+            : "warning",
       },
     },
     contracts: {

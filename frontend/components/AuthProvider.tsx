@@ -13,6 +13,7 @@ import {
   connectWallet,
   getConnectedWallet,
   hasInjectedWalletProvider,
+  isSupportedChainId,
   isWalletActionRejected,
   WalletConnectionError,
 } from "@/lib/wallet"
@@ -77,7 +78,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           )
           setWalletWarning(
             wallet && !wallet.isSupportedNetwork
-              ? "Switch MetaMask to the Hardhat localhost network to use authenticated flows."
+              ? "Switch MetaMask to the configured DACS network to use authenticated flows."
               : null
           )
         }
@@ -166,7 +167,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (!nextAddress) {
         setAuthFlowState("idle")
-        setWalletWarning("MetaMask is disconnected. Reconnect it for upload and admin actions.")
+        setWalletWarning("MetaMask is disconnected. Reconnect it for upload and reviewer actions.")
         return
       }
 
@@ -184,7 +185,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setWalletNote(null)
           setWalletWarning(
             wallet && !wallet.isSupportedNetwork
-              ? "Switch MetaMask to the Hardhat localhost network to continue."
+              ? "Switch MetaMask to the configured DACS network to continue."
               : null
           )
         })
@@ -236,7 +237,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       toast.success(
         nextUser.role === "admin"
           ? "Admin session restored on DACS."
-          : "Wallet connected and signed in to DACS."
+          : nextUser.role === "verifier"
+            ? "Verifier session restored on DACS."
+            : "Wallet connected and signed in to DACS."
       )
     } catch (error) {
       if (isWalletActionRejected(error)) {
@@ -281,7 +284,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isSupportedNetwork:
           connectedWalletAddress !== null &&
           chainId !== null &&
-          (chainId === 1337 || chainId === 31337),
+          isSupportedChainId(chainId),
         isReady,
         isAuthenticating,
         isAuthenticated: !!token && !!user,

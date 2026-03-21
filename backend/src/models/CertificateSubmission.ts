@@ -7,6 +7,12 @@ export const CERTIFICATE_STATUSES = [
   "minted",
 ] as const;
 
+export const VERIFICATION_STATUSES = [
+  "active",
+  "expired",
+  "revoked",
+] as const;
+
 export const CREDENTIAL_TYPES = [
   "course",
   "workshop",
@@ -89,11 +95,38 @@ const certificateSubmissionSchema = new Schema(
       trim: true,
       index: true,
     },
-    cid: {
+    instituteHash: {
       type: String,
       required: true,
       trim: true,
       index: true,
+    },
+    evidenceHash: {
+      type: String,
+      required: true,
+      trim: true,
+      index: true,
+    },
+    privateEvidenceRef: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    publicProofCid: {
+      type: String,
+      trim: true,
+      index: true,
+    },
+    publicProofPayload: {
+      type: Schema.Types.Mixed,
+    },
+    claimsRoot: {
+      type: String,
+      trim: true,
+      index: true,
+    },
+    claimSet: {
+      type: Schema.Types.Mixed,
     },
     fileName: {
       type: String,
@@ -109,6 +142,11 @@ const certificateSubmissionSchema = new Schema(
       type: String,
       enum: CERTIFICATE_STATUSES,
       default: "pending_review",
+      index: true,
+    },
+    verificationStatus: {
+      type: String,
+      enum: VERIFICATION_STATUSES,
       index: true,
     },
     eduAmount: {
@@ -134,6 +172,22 @@ const certificateSubmissionSchema = new Schema(
       lowercase: true,
     },
     reviewNote: {
+      type: String,
+      trim: true,
+    },
+    expiresAt: {
+      type: Date,
+      index: true,
+    },
+    revokedAt: {
+      type: Date,
+      index: true,
+    },
+    revocationReason: {
+      type: String,
+      trim: true,
+    },
+    revocationReasonHash: {
       type: String,
       trim: true,
     },

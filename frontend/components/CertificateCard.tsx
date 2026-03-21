@@ -61,7 +61,7 @@ export function CertificateCard({
           </div>
         )}
         <div className="flex items-center gap-2">
-          <span className="text-slate-500">CID:</span>
+          <span className="text-slate-500">Proof CID:</span>
           <span className="text-slate-300 font-mono text-xs truncate max-w-[180px]">
             {cid}
           </span>

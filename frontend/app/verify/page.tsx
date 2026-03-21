@@ -32,6 +32,10 @@ function sanitizeDownloadName(value: string) {
   return normalized || "credential"
 }
 
+function formatVerificationStatusLabel(value: string) {
+  return value.charAt(0).toUpperCase() + value.slice(1)
+}
+
 function downloadTextFile(filename: string, contents: string, type: string) {
   const blob = new Blob([contents], { type })
   const url = URL.createObjectURL(blob)
@@ -183,12 +187,14 @@ function VerifyPageContent() {
         studentAddress: record.studentAddress,
         verifierAddress: record.verifierAddress,
         issuedAt: record.issuedAt,
+        expiresAt: record.expiresAt,
+        verificationStatus: record.verificationStatus,
         eduAmount: record.eduAmount,
-        cid: record.cid,
+        publicProofCid: record.publicProofCid,
+        evidenceHash: record.evidenceHash,
+        claimsRoot: record.claimsRoot,
         txHash: record.txHash,
-        ipfsUrl: record.ipfsUrl,
-        fileName: record.fileName,
-        mimeType: record.mimeType,
+        publicProofUrl: record.publicProofUrl,
         reviewNote: record.reviewNote,
       },
       proof: record.proof,
@@ -204,15 +210,16 @@ function VerifyPageContent() {
     return [
       {
         label: "Verification status",
-        value: "On-chain record confirmed",
-        detail: "The PoCT credential and holder mapping resolved successfully from the local chain.",
+        value: formatVerificationStatusLabel(record.verificationStatus),
+        detail: "The PoCT credential, holder mapping, and lifecycle status resolved successfully from the local chain.",
       },
       {
-        label: "Evidence source",
-        value: "IPFS-backed evidence attached",
-        detail: record.fileName
-          ? `${record.fileName} • ${record.mimeType ?? "Unknown format"}`
-          : "Evidence metadata is preserved alongside the token record.",
+        label: "Public proof source",
+        value: "IPFS proof metadata attached",
+        detail:
+          record.publicProofCid && record.publicProofUrl
+            ? `${record.publicProofCid} • immutable proof metadata`
+            : "Public proof metadata is preserved alongside the token record.",
       },
       {
         label: "Transferability",
@@ -281,10 +288,11 @@ function VerifyPageContent() {
       `EDU Reward: ${
         record.eduAmount !== null ? `${record.eduAmount.toLocaleString()} EDU` : "Not available"
       }`,
-      `Evidence File: ${record.fileName ?? "Not available"}`,
-      `Evidence Format: ${record.mimeType ?? "Not available"}`,
-      `IPFS CID: ${record.cid}`,
-      `IPFS URL: ${record.ipfsUrl}`,
+      `Verification Status: ${formatVerificationStatusLabel(record.verificationStatus)}`,
+      `Public Proof CID: ${record.publicProofCid}`,
+      `Public Proof URL: ${record.publicProofUrl ?? "Not available"}`,
+      `Evidence Hash: ${record.evidenceHash ?? "Not available"}`,
+      `Claims Root: ${record.claimsRoot}`,
       `Mint Transaction: ${record.txHash ?? "Not available"}`,
       "",
       `Chain ID: ${record.proof.chainId}`,
@@ -391,7 +399,7 @@ function VerifyPageContent() {
         </h1>
         <p className="text-slate-300">
           DACS reads the ownership and certificate record from the blockchain, then
-          joins the on-chain token with its off-chain credential and institute metadata.
+          joins the on-chain token with immutable public proof metadata and institute context.
         </p>
       </section>
 
@@ -463,17 +471,18 @@ function VerifyPageContent() {
                     <p className="mt-5 max-w-2xl text-sm leading-7 text-slate-300 print-subtle-text sm:text-base">
                       This credential confirms that the holder of the mapped wallet owns
                       a verified academic completion record anchored on-chain through the
-                      DACS platform, with evidence preserved on IPFS and issuance
+                      DACS platform, with public proof metadata preserved on IPFS,
+                      the evidence hash anchored for integrity checks, and issuance
                       validated by the configured verifier authority.
                     </p>
 
                     <div className="mt-6 flex flex-wrap gap-2">
                       {[
-                        "On-chain verified",
+                        `${formatVerificationStatusLabel(record.verificationStatus)} status`,
                         record.proof.soulbound
                           ? "Soulbound credential"
                           : "Transferable credential",
-                        "IPFS evidence attached",
+                        "Public proof attached",
                       ].map((label) => (
                         <div
                           key={label}
@@ -529,6 +538,14 @@ function VerifyPageContent() {
                 </div>
                 <div className="print-panel rounded-2xl border border-white/10 bg-white/[0.03] p-4">
                   <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
+                    Expires At
+                  </div>
+                  <div className="mt-2 text-white print-on-light">
+                    {formatDateTime(record.expiresAt)}
+                  </div>
+                </div>
+                <div className="print-panel rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                  <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
                     Credential Type
                   </div>
                   <div className="mt-2 text-white print-on-light">
@@ -547,18 +564,26 @@ function VerifyPageContent() {
                 </div>
                 <div className="print-panel rounded-2xl border border-white/10 bg-white/[0.03] p-4">
                   <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
-                    Evidence File
+                    Verification Status
                   </div>
-                  <div className="mt-2 break-words text-white print-on-light">
-                    {record.fileName ?? "Not available"}
+                  <div className="mt-2 text-white print-on-light">
+                    {formatVerificationStatusLabel(record.verificationStatus)}
                   </div>
                 </div>
                 <div className="print-panel rounded-2xl border border-white/10 bg-white/[0.03] p-4">
                   <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
-                    Evidence Format
+                    Evidence Hash
                   </div>
-                  <div className="mt-2 text-white print-on-light">
-                    {record.mimeType ?? "Not available"}
+                  <div className="mt-2 break-all font-mono text-white print-mono-text">
+                    {record.evidenceHash ?? "Not available"}
+                  </div>
+                </div>
+                <div className="print-panel rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                  <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
+                    Claims Root
+                  </div>
+                  <div className="mt-2 break-all font-mono text-white print-mono-text">
+                    {record.claimsRoot}
                   </div>
                 </div>
               </div>
@@ -566,15 +591,31 @@ function VerifyPageContent() {
               <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-[1.15fr_0.85fr] lg:items-start">
                 <div className="print-panel rounded-2xl border border-white/10 bg-black/20 p-5">
                   <div className="mb-3 text-xs uppercase tracking-[0.24em] text-slate-500">
-                    Evidence Anchors
+                    Proof Anchors
                   </div>
                   <div className="space-y-4 text-sm text-slate-300">
                     <div>
                       <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
-                        IPFS CID
+                        Public Proof CID
                       </div>
                       <div className="mt-2 break-all font-mono text-cyan-200 print-mono-text">
-                        {record.cid}
+                        {record.publicProofCid}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
+                        Evidence Hash
+                      </div>
+                      <div className="mt-2 break-all font-mono text-slate-200 print-mono-text">
+                        {record.evidenceHash ?? "Not available"}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
+                        Claims Root
+                      </div>
+                      <div className="mt-2 break-all font-mono text-slate-200 print-mono-text">
+                        {record.claimsRoot}
                       </div>
                     </div>
                     {record.txHash ? (
@@ -605,11 +646,12 @@ function VerifyPageContent() {
                   <div className="space-y-3 text-sm text-slate-300">
                     <p className="print-subtle-text">
                       The credential details above were resolved from the live PoCT
-                      contract and joined with workflow metadata captured during the
-                      institutional review lifecycle.
+                      contract and joined with immutable proof metadata captured at
+                      mint time. MongoDB lifecycle history is supplemental rather than
+                      the public source of truth.
                     </p>
                     <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4 text-emerald-100 print-panel">
-                      Chain {record.proof.chainId} • Mint authority confirmed •{" "}
+                      Chain {record.proof.chainId} • {formatVerificationStatusLabel(record.verificationStatus)} •{" "}
                       {record.proof.soulbound ? "Non-transferable" : "Transferable"}
                     </div>
                   </div>
@@ -644,11 +686,11 @@ function VerifyPageContent() {
                       Verification Status
                     </div>
                     <div className="mt-2 text-lg font-semibold text-white">
-                      Immutable credential confirmed
+                      {formatVerificationStatusLabel(record.verificationStatus)}
                     </div>
                     <p className="mt-2 text-sm text-emerald-100/80">
                       This record was resolved from the live PoCT contract and joined
-                      with the institutional review trail captured in DACS.
+                      with immutable public proof metadata captured at mint time.
                     </p>
                   </div>
 
@@ -719,14 +761,16 @@ function VerifyPageContent() {
                         </div>
                       </div>
                       <div className="mt-4 grid gap-3">
-                        <a
-                          href={record.ipfsUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="rounded-xl border border-white/10 px-4 py-3 text-sm font-medium text-white transition hover:bg-white/10"
-                        >
-                          Open Evidence File
-                        </a>
+                        {record.publicProofUrl ? (
+                          <a
+                            href={record.publicProofUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="rounded-xl border border-white/10 px-4 py-3 text-sm font-medium text-white transition hover:bg-white/10"
+                          >
+                            Open Public Proof JSON
+                          </a>
+                        ) : null}
                         <button
                           type="button"
                           onClick={() =>
@@ -860,7 +904,7 @@ function VerifyPageContent() {
             {
               title: "1. Enter Token ID",
               description:
-                "Use the minted PoCT token number from the admin flow or student dashboard.",
+                "Use the minted PoCT token number from the reviewer flow or student dashboard.",
             },
             {
               title: "2. Read Chain Data",

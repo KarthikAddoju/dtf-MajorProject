@@ -1,6 +1,6 @@
 "use client"
 
-import Image from "next/image"
+import { ethers } from "ethers"
 import { type FormEvent, useEffect, useMemo, useState } from "react"
 import { AuditTrailList } from "@/components/AuditTrailList"
 import { DashboardCard } from "@/components/DashboardCard"
@@ -14,23 +14,30 @@ import { useAuth } from "@/components/AuthProvider"
 import {
   createInstitute,
   fetchAllSubmissions,
+  fetchEvidenceBlob,
   fetchManageInstitutes,
   fetchPendingSubmissions,
+  finalizeCredentialRevocation,
+  finalizeMintSubmission,
   isAbortError,
-  mintSubmission,
+  prepareMintSubmission,
   rejectSubmission,
   updateInstitute,
 } from "@/lib/api"
+import { ensureInstituteVerifierAuthorization, submitCredentialRevocation, submitDualMint } from "@/lib/contracts/mint-controller"
+import { openPrivateEvidence } from "@/lib/evidence"
 import {
   formatCredentialTypeLabel,
   formatDateTime,
   truncateValue,
 } from "@/lib/formatting"
+import { connectWallet } from "@/lib/wallet"
 import type { Institute, Submission } from "@/lib/types"
 
 interface ReviewDraft {
   eduAmount: string
   reviewNote: string
+  expiresAt: string
 }
 
 interface InstituteFieldErrors {
@@ -71,6 +78,22 @@ function getEduAmountError(value: string) {
   return undefined
 }
 
+function toDateTimeLocalValue(value: string | null) {
+  if (!value) {
+    return ""
+  }
+
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return ""
+  }
+
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
+    .toISOString()
+    .slice(0, 16)
+}
+
 export default function AdminPage() {
   const {
     authFlowState,
@@ -98,6 +121,9 @@ export default function AdminPage() {
   const [newInstituteShortCode, setNewInstituteShortCode] = useState("")
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedSubmissionId, setSelectedSubmissionId] = useState<string | null>(null)
+  const [selectedEvidencePreviewUrl, setSelectedEvidencePreviewUrl] = useState<string | null>(
+    null
+  )
   const [refreshNonce, setRefreshNonce] = useState(0)
   const [reviewFieldErrors, setReviewFieldErrors] = useState<
     Record<string, { eduAmount?: string }>
@@ -126,6 +152,7 @@ export default function AdminPage() {
           nextDrafts[submission.id] = {
             eduAmount: submission.eduAmount?.toString() ?? "100",
             reviewNote: submission.reviewNote ?? "",
+            expiresAt: toDateTimeLocalValue(submission.expiresAt),
           }
         }
       }
@@ -153,7 +180,7 @@ export default function AdminPage() {
   }, [pendingSubmissions])
 
   useEffect(() => {
-    if (!token || user?.role !== "admin") {
+    if (!token || (user?.role !== "admin" && user?.role !== "verifier")) {
       setPendingSubmissions([])
       setAllSubmissions([])
       setInstitutes([])
@@ -170,7 +197,9 @@ export default function AdminPage() {
           await Promise.all([
             fetchPendingSubmissions(authToken, controller.signal),
             fetchAllSubmissions(authToken, controller.signal),
-            fetchManageInstitutes(authToken, controller.signal),
+            user?.role === "admin"
+              ? fetchManageInstitutes(authToken, controller.signal)
+              : Promise.resolve({ institutes: [] }),
           ])
 
         if (controller.signal.aborted) {
@@ -205,7 +234,7 @@ export default function AdminPage() {
   }, [refreshNonce, token, user?.role])
 
   async function handleApprove(submission: Submission) {
-    if (!token) {
+    if (!token || !user) {
       return
     }
 
@@ -228,26 +257,70 @@ export default function AdminPage() {
     }
 
     const parsedEduAmount = Number(draft?.eduAmount ?? "")
+    const normalizedExpiry = draft?.expiresAt?.trim() ? new Date(draft.expiresAt) : null
+
+    if (normalizedExpiry && Number.isNaN(normalizedExpiry.getTime())) {
+      setConsoleStatus({
+        tone: "error",
+        title: "Expiry date invalid",
+        message: "Use a valid expiry date or leave the field blank.",
+      })
+      setSelectedSubmissionId(submission.id)
+      return
+    }
 
     setProcessingSubmissionId(submission.id)
     setConsoleStatus({
       tone: "info",
-      title: "Mint transaction in progress",
+      title: "Preparing wallet-signed mint",
       message:
-        "The verifier is minting the credential, rewarding EDU, and waiting for confirmation from the local blockchain.",
+        "DACS is preparing the public proof bundle and canonical mint payload for the reviewer wallet.",
     })
 
     try {
-      const response = await mintSubmission(authToken, {
+      const prepared = await prepareMintSubmission(authToken, {
         submissionId: submission.id,
         eduAmount: parsedEduAmount,
         reviewNote: draft?.reviewNote.trim() || undefined,
+        expiresAt: normalizedExpiry?.toISOString() ?? null,
       })
+      const wallet = await connectWallet()
+
+      if (wallet.address !== user.address) {
+        throw new Error(
+          "The connected wallet does not match the signed reviewer session. Reconnect with the same wallet you authenticated with."
+        )
+      }
+
+      setConsoleStatus({
+        tone: "info",
+        title: "Awaiting wallet confirmation",
+        message:
+          "Review the transaction in MetaMask. DACS will finalize the mint only after the on-chain receipt is confirmed.",
+      })
+
+      await ensureInstituteVerifierAuthorization(
+        wallet.signer,
+        prepared.mintPayload.instituteHash
+      )
+
+      const mintTransaction = await submitDualMint(wallet.signer, prepared.mintPayload)
+      const receipt = await mintTransaction.wait()
+
+      if (!receipt) {
+        throw new Error("Mint transaction confirmation could not be resolved.")
+      }
+
+      const finalized = await finalizeMintSubmission(
+        authToken,
+        submission.id,
+        mintTransaction.hash
+      )
 
       setConsoleStatus({
         tone: "success",
         title: "Credential minted",
-        message: `Token #${response.tokenId} minted successfully and ${response.eduAmount} EDU was rewarded. VC and Open Badge exports are now live automatically.`,
+        message: `Token #${finalized.tokenId} minted successfully. Public proof, VC, and Open Badge exports are now live without exposing the private evidence file.`,
       })
       setRefreshNonce((value) => value + 1)
     } catch (error) {
@@ -260,6 +333,24 @@ export default function AdminPage() {
       })
     } finally {
       setProcessingSubmissionId(null)
+    }
+  }
+
+  async function handleOpenEvidence(submission: Submission) {
+    if (!token) {
+      return
+    }
+
+    try {
+      await openPrivateEvidence(token, submission.id, submission.fileName)
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Could not open the private evidence file"
+      setConsoleStatus({
+        tone: "error",
+        title: "Evidence unavailable",
+        message,
+      })
     }
   }
 
@@ -298,6 +389,83 @@ export default function AdminPage() {
       setConsoleStatus({
         tone: "error",
         title: "Rejection could not be saved",
+        message,
+      })
+    } finally {
+      setProcessingSubmissionId(null)
+    }
+  }
+
+  async function handleRevoke(submission: Submission) {
+    if (!token || !user || !submission.tokenId) {
+      return
+    }
+
+    const reason = window.prompt(
+      `Enter a revocation reason for token #${submission.tokenId}:`,
+      submission.revocationReason ?? "Credential revoked"
+    )
+
+    if (reason === null) {
+      return
+    }
+
+    const normalizedReason = reason.trim()
+
+    if (!normalizedReason) {
+      setConsoleStatus({
+        tone: "error",
+        title: "Revocation reason required",
+        message: "Enter a reason so the revocation can be hashed, recorded, and audited.",
+      })
+      return
+    }
+
+    setProcessingSubmissionId(submission.id)
+    setConsoleStatus({
+      tone: "info",
+      title: "Awaiting revocation confirmation",
+      message:
+        "Confirm the revocation transaction in MetaMask. DACS will update the audit trail after the on-chain receipt is available.",
+    })
+
+    try {
+      const wallet = await connectWallet()
+
+      if (wallet.address !== user.address) {
+        throw new Error(
+          "The connected wallet does not match the signed reviewer session. Reconnect with the same wallet you authenticated with."
+        )
+      }
+
+      const revokeTransaction = await submitCredentialRevocation(
+        wallet.signer,
+        submission.tokenId,
+        ethers.id(normalizedReason)
+      )
+      const receipt = await revokeTransaction.wait()
+
+      if (!receipt) {
+        throw new Error("Revocation transaction confirmation could not be resolved.")
+      }
+
+      await finalizeCredentialRevocation(token, submission.tokenId, {
+        txHash: revokeTransaction.hash,
+        reason: normalizedReason,
+      })
+
+      setConsoleStatus({
+        tone: "success",
+        title: "Credential revoked",
+        message: `Token #${submission.tokenId} now resolves as revoked across the verification sheet and exports.`,
+      })
+      setRefreshNonce((value) => value + 1)
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Could not revoke the credential"
+      setConsoleStatus({
+        tone: "error",
+        title: "Revocation failed",
         message,
       })
     } finally {
@@ -426,7 +594,8 @@ export default function AdminPage() {
         submission.instituteName,
         submission.studentAddress,
         submission.fileName,
-        submission.cid,
+        submission.evidenceHash,
+        submission.publicProofCid,
       ]
         .join(" ")
         .toLowerCase()
@@ -472,8 +641,51 @@ export default function AdminPage() {
     ? reviewDrafts[selectedSubmission.id] ?? {
         eduAmount: selectedSubmission.eduAmount?.toString() ?? "100",
         reviewNote: selectedSubmission.reviewNote ?? "",
+        expiresAt: toDateTimeLocalValue(selectedSubmission.expiresAt),
       }
     : null
+
+  useEffect(() => {
+    if (!token || !selectedSubmission) {
+      setSelectedEvidencePreviewUrl(null)
+      return
+    }
+
+    const authToken = token
+    const controller = new AbortController()
+    let nextObjectUrl: string | null = null
+
+    async function loadPreview() {
+      try {
+        const evidenceBlob = await fetchEvidenceBlob(authToken, selectedSubmission.id, {
+          signal: controller.signal,
+        })
+
+        if (controller.signal.aborted) {
+          return
+        }
+
+        nextObjectUrl = URL.createObjectURL(evidenceBlob)
+        setSelectedEvidencePreviewUrl(nextObjectUrl)
+      } catch (error) {
+        if (controller.signal.aborted || isAbortError(error)) {
+          return
+        }
+
+        setSelectedEvidencePreviewUrl(null)
+      }
+    }
+
+    void loadPreview()
+
+    return () => {
+      controller.abort()
+
+      if (nextObjectUrl) {
+        URL.revokeObjectURL(nextObjectUrl)
+      }
+    }
+  }, [selectedSubmission, token])
   const canSelectPrevious = selectedSubmissionIndex > 0
   const canSelectNext =
     selectedSubmissionIndex >= 0 &&
@@ -498,7 +710,7 @@ export default function AdminPage() {
   }
 
   useEffect(() => {
-    if (!selectedSubmission || user?.role !== "admin") {
+    if (!selectedSubmission || (user?.role !== "admin" && user?.role !== "verifier")) {
       return
     }
 
@@ -556,21 +768,25 @@ export default function AdminPage() {
       <section className="mb-8 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
         <div className="max-w-3xl">
           <div className="brand-chip mb-4">
-            Admin Review Console
+            Reviewer Console
           </div>
           <h1 className="display-serif mb-3 text-4xl font-semibold text-white sm:text-5xl">
-            Review submissions, mint credentials, and manage live institutes.
+            Review submissions, mint credentials, and protect institute trust.
           </h1>
           <p className="text-[#c8d0de]">
-            This console is backed by MongoDB for workflow state and uses the
-            backend verifier to mint PoCT NFTs and EDU rewards on-chain.
+            This console is backed by MongoDB for workflow state, prepares public
+            proof payloads, and relies on reviewer wallets to submit mint and
+            revoke transactions on-chain.
           </p>
         </div>
 
         {user ? (
           <div className="flex flex-wrap items-center gap-3">
             <RoleBadge role={user.role} />
-            <WalletBadge address={user.address} label="Admin Session" />
+            <WalletBadge
+              address={user.address}
+              label={user.role === "admin" ? "Admin Session" : "Verifier Session"}
+            />
           </div>
         ) : null}
       </section>
@@ -578,7 +794,7 @@ export default function AdminPage() {
       {!isReady ? (
         <DashboardCard>
           <div className="py-12 text-center text-slate-300">
-            Restoring your admin session...
+            Restoring your reviewer session...
           </div>
         </DashboardCard>
       ) : null}
@@ -588,11 +804,11 @@ export default function AdminPage() {
           <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h2 className="display-serif mb-2 text-[2rem] font-semibold text-white">
-                Admin wallet sign-in required
+                Reviewer wallet sign-in required
               </h2>
               <p className="max-w-2xl text-[#c8d0de]">
-                The admin page is protected by JWT session auth and the configured
-                admin wallet address. Connect the verifier wallet to continue.
+                The reviewer console is protected by JWT session auth and wallet
+                role checks. Connect an authorized admin or verifier wallet to continue.
               </p>
             </div>
             <button
@@ -606,8 +822,8 @@ export default function AdminPage() {
                   ? "Connecting Wallet..."
                   : authFlowState === "wallet_connected" ||
                       Boolean(connectedWalletAddress)
-                    ? "Complete Admin Sign-In"
-                    : "Connect Admin Wallet"}
+                    ? "Complete Reviewer Sign-In"
+                    : "Connect Reviewer Wallet"}
             </button>
           </div>
           {walletNote ? (
@@ -622,7 +838,10 @@ export default function AdminPage() {
         </DashboardCard>
       ) : null}
 
-      {isReady && isAuthenticated && user?.role !== "admin" ? (
+      {isReady &&
+      isAuthenticated &&
+      user?.role !== "admin" &&
+      user?.role !== "verifier" ? (
         <DashboardCard>
           <div className="py-12 text-center">
             <h2 className="mb-3 text-2xl font-semibold text-white">
@@ -630,18 +849,20 @@ export default function AdminPage() {
             </h2>
             <p className="mx-auto max-w-2xl text-slate-300">
               Your current wallet is signed in as a student account. Switch to the
-              configured admin wallet to review pending credentials.
+              configured reviewer wallet to review pending credentials.
             </p>
           </div>
         </DashboardCard>
       ) : null}
 
-      {isReady && isAuthenticated && user?.role === "admin" ? (
+      {isReady &&
+      isAuthenticated &&
+      (user?.role === "admin" || user?.role === "verifier") ? (
         <>
           <div className="mb-8 rounded-[24px_12px_24px_12px] border border-[#77997f]/24 bg-[#77997f]/10 px-5 py-4 text-sm text-[#d7ebd8]">
-            The admin flow stays simple: inspect the evidence, add a note if
-            needed, approve or reject, and mint. Public proof artifacts publish
-            automatically after approval.
+            The reviewer flow stays simple: inspect private evidence, set the EDU
+            reward, optionally add expiry, and submit the mint from your wallet.
+            Public proof artifacts publish automatically after approval.
           </div>
 
           {consoleStatus ? (
@@ -695,12 +916,12 @@ export default function AdminPage() {
                     type="text"
                     value={searchQuery}
                     onChange={(event) => setSearchQuery(event.target.value)}
-                    placeholder="Search by credential title, type, institute, student wallet, file name, or CID"
+                    placeholder="Search by credential title, type, institute, student wallet, file name, evidence hash, or proof CID"
                     className="w-full rounded-[18px] border border-[#eedfce]/12 bg-[rgba(255,255,255,0.04)] px-4 py-3 text-white placeholder:text-[#8ea0b8] focus:border-[#d25b36]/45 focus:outline-none"
                   />
                   <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
                     <p className="text-xs text-slate-500">
-                      Search updates live across title, institute, wallet, CID, and file name.
+                      Search updates live across title, institute, wallet, hashes, and file name.
                     </p>
                     {searchQuery.trim() ? (
                       <button
@@ -758,6 +979,7 @@ export default function AdminPage() {
                     const draft = reviewDrafts[submission.id] ?? {
                       eduAmount: "100",
                       reviewNote: "",
+                      expiresAt: toDateTimeLocalValue(submission.expiresAt),
                     }
                     const isProcessing = processingSubmissionId === submission.id
                     const isSelected = selectedSubmissionId === submission.id
@@ -801,10 +1023,10 @@ export default function AdminPage() {
                           </div>
                           <div className="rounded-xl border border-white/10 bg-black/20 p-4">
                             <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
-                              CID
+                              Evidence Hash
                             </div>
                             <div className="mt-2 font-mono text-[#d5e7f1]">
-                              {truncateValue(submission.cid, 16, 12)}
+                              {truncateValue(submission.evidenceHash, 16, 12)}
                             </div>
                           </div>
                           <div className="rounded-xl border border-white/10 bg-black/20 p-4">
@@ -821,7 +1043,7 @@ export default function AdminPage() {
                           </div>
                         </div>
 
-                        <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-[0.35fr_0.65fr]">
+                        <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-[0.28fr_0.28fr_0.44fr]">
                           <div>
                             <label
                               htmlFor={`eduAmount-${submission.id}`}
@@ -893,6 +1115,33 @@ export default function AdminPage() {
 
                           <div>
                             <label
+                              htmlFor={`expiresAt-${submission.id}`}
+                              className="mb-2 block text-sm font-medium text-slate-300"
+                            >
+                              Optional Expiry
+                            </label>
+                            <input
+                              id={`expiresAt-${submission.id}`}
+                              type="datetime-local"
+                              value={draft.expiresAt}
+                              onChange={(event) =>
+                                setReviewDrafts((currentDrafts) => ({
+                                  ...currentDrafts,
+                                  [submission.id]: {
+                                    ...draft,
+                                    expiresAt: event.target.value,
+                                  },
+                                }))
+                              }
+                              className="w-full rounded-[18px] border border-[#eedfce]/12 bg-[rgba(255,255,255,0.04)] px-4 py-3 text-white focus:border-[#d25b36]/45 focus:outline-none"
+                            />
+                            <p className="mt-2 text-sm text-slate-400">
+                              Leave blank for non-expiring credentials.
+                            </p>
+                          </div>
+
+                          <div>
+                            <label
                               htmlFor={`reviewNote-${submission.id}`}
                               className="mb-2 block text-sm font-medium text-slate-300"
                             >
@@ -929,14 +1178,13 @@ export default function AdminPage() {
                           >
                             {isSelected ? "Previewing" : "Review Workspace"}
                           </button>
-                          <a
-                            href={submission.ipfsUrl}
-                            target="_blank"
-                            rel="noreferrer"
+                          <button
+                            type="button"
+                            onClick={() => void handleOpenEvidence(submission)}
                             className="rounded-lg border border-white/10 px-4 py-2 text-sm text-white transition hover:bg-white/10"
                           >
-                            Open Evidence File
-                          </a>
+                            Open Private Evidence
+                          </button>
                           <button
                             type="button"
                             onClick={() => void handleReject(submission)}
@@ -951,7 +1199,7 @@ export default function AdminPage() {
                             disabled={isProcessing}
                             className="brand-button-primary px-4 py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                           >
-                            {isProcessing ? "Minting..." : "Approve & Mint"}
+                            {isProcessing ? "Processing..." : "Prepare & Mint"}
                           </button>
                         </div>
                       </div>
@@ -1006,14 +1254,13 @@ export default function AdminPage() {
                         >
                           Next ]
                         </button>
-                        <a
-                          href={selectedSubmission.ipfsUrl}
-                          target="_blank"
-                          rel="noreferrer"
+                        <button
+                          type="button"
+                          onClick={() => void handleOpenEvidence(selectedSubmission)}
                           className="rounded-full border border-[#8bbbd5]/24 bg-[#8bbbd5]/10 px-4 py-2 text-sm font-medium text-[#d6edf8] transition hover:bg-[#8bbbd5]/18"
                         >
-                          Open Evidence
-                        </a>
+                          Open Private Evidence
+                        </button>
                       </div>
                     </div>
 
@@ -1037,26 +1284,27 @@ export default function AdminPage() {
                     </div>
 
                     <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
-                      {selectedSubmission.mimeType === "application/pdf" ? (
+                      {selectedEvidencePreviewUrl &&
+                      selectedSubmission.mimeType === "application/pdf" ? (
                         <iframe
-                          src={selectedSubmission.ipfsUrl}
+                          src={selectedEvidencePreviewUrl}
                           title={`${selectedSubmission.courseName} preview`}
                           className="h-[420px] w-full rounded-xl bg-slate-950"
                         />
-                      ) : selectedSubmission.mimeType.startsWith("image/") ? (
+                      ) : selectedEvidencePreviewUrl &&
+                        selectedSubmission.mimeType.startsWith("image/") ? (
                         <div className="relative h-[420px] overflow-hidden rounded-xl bg-slate-950">
-                          <Image
-                            src={selectedSubmission.ipfsUrl}
+                          <img
+                            src={selectedEvidencePreviewUrl}
                             alt={selectedSubmission.courseName}
-                            fill
-                            unoptimized
-                            className="object-contain"
+                            className="h-full w-full object-contain"
                           />
                         </div>
                       ) : (
                         <div className="flex h-[420px] items-center justify-center rounded-xl bg-slate-950 text-center text-slate-400">
-                          Preview is not available for this file type. Open the IPFS
-                          file in a separate tab instead.
+                          Preview is not available for this file type right now. Use
+                          the private evidence button above to inspect or download the
+                          encrypted evidence file.
                         </div>
                       )}
                     </div>
@@ -1086,6 +1334,18 @@ export default function AdminPage() {
                               : "Optional for approval, recommended for rejection"}
                           </div>
                         </div>
+                        <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                          <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                            Expiry
+                          </div>
+                          <div className="mt-2 text-white">
+                            {selectedDraft?.expiresAt
+                              ? formatDateTime(
+                                  new Date(selectedDraft.expiresAt).toISOString()
+                                )
+                              : "No expiry set"}
+                          </div>
+                        </div>
                       </div>
 
                       <div className="mt-4 flex flex-wrap gap-3">
@@ -1106,8 +1366,8 @@ export default function AdminPage() {
                           className="brand-button-primary px-4 py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           {processingSubmissionId === selectedSubmission.id
-                            ? "Minting..."
-                            : "Approve & Mint From Workspace"}
+                            ? "Processing..."
+                            : "Prepare & Mint From Workspace"}
                         </button>
                       </div>
                     </div>
@@ -1117,9 +1377,9 @@ export default function AdminPage() {
                         Review Notes
                       </div>
                       <p>
-                        Use the queue card on the left to assign the EDU reward, add
-                        a reviewer note, and approve or reject while keeping the
-                        credential evidence preview open here.
+                        Use the queue card on the left to assign the EDU reward, set
+                        optional expiry, add a reviewer note, and approve or reject
+                        while keeping the private evidence preview open here.
                       </p>
                     </div>
 
@@ -1156,6 +1416,7 @@ export default function AdminPage() {
                 )}
               </DashboardCard>
 
+              {user?.role === "admin" ? (
               <DashboardCard title="Institute Management">
                 <form onSubmit={handleCreateInstitute} className="space-y-4">
                   {instituteSubmitAttempted && instituteSummaryItems.length > 0 ? (
@@ -1301,6 +1562,7 @@ export default function AdminPage() {
                   })}
                 </div>
               </DashboardCard>
+              ) : null}
 
               <DashboardCard title="Recent Review Activity">
                 {recentReviews.length === 0 ? (
@@ -1329,19 +1591,27 @@ export default function AdminPage() {
                           <div
                             className={`rounded-full px-3 py-1 text-xs font-medium ${
                               submission.status === "minted"
-                                ? "border border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
+                                ? submission.verificationStatus === "revoked"
+                                  ? "border border-fuchsia-500/30 bg-fuchsia-500/10 text-fuchsia-200"
+                                  : "border border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
                                 : "border border-rose-500/30 bg-rose-500/10 text-rose-200"
                             }`}
                           >
-                            {submission.status === "minted" ? "Minted" : "Rejected"}
+                            {submission.status === "minted"
+                              ? submission.verificationStatus === "revoked"
+                                ? "Revoked"
+                                : "Minted"
+                              : "Rejected"}
                           </div>
                         </div>
 
                         <div className="mt-3 text-sm text-slate-300">
                           {submission.status === "minted" ? (
                             <>
-                              Token #{submission.tokenId} minted on{" "}
-                              {formatDateTime(submission.mintedAt)}
+                              Token #{submission.tokenId} {submission.verificationStatus === "revoked"
+                                ? "was revoked"
+                                : "minted"} on{" "}
+                              {formatDateTime(submission.revokedAt ?? submission.mintedAt)}
                             </>
                           ) : (
                             <>Rejected on {formatDateTime(submission.reviewedAt)}</>
@@ -1353,6 +1623,30 @@ export default function AdminPage() {
                             {submission.reviewNote}
                           </div>
                         ) : null}
+
+                        <div className="mt-3 flex flex-wrap gap-3">
+                          {submission.tokenId ? (
+                            <a
+                              href={`/verify?tokenId=${submission.tokenId}`}
+                              className="rounded-lg border border-white/10 px-4 py-2 text-sm text-white transition hover:bg-white/10"
+                            >
+                              Open Proof Sheet
+                            </a>
+                          ) : null}
+                          {submission.status === "minted" &&
+                          submission.verificationStatus !== "revoked" ? (
+                            <button
+                              type="button"
+                              onClick={() => void handleRevoke(submission)}
+                              disabled={processingSubmissionId === submission.id}
+                              className="rounded-lg border border-fuchsia-500/30 bg-fuchsia-500/10 px-4 py-2 text-sm font-medium text-fuchsia-200 transition hover:bg-fuchsia-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {processingSubmissionId === submission.id
+                                ? "Processing..."
+                                : "Revoke Credential"}
+                            </button>
+                          ) : null}
+                        </div>
                       </div>
                     ))}
                   </div>

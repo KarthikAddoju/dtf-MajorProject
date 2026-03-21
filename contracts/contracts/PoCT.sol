@@ -1,56 +1,118 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 
 contract PoCT is ERC721Enumerable, Ownable {
-
     uint256 private _tokenIds;
     address public mintController;
 
     error SoulboundTransferNotAllowed();
 
+    enum CredentialStatus {
+        Active,
+        Expired,
+        Revoked
+    }
+
     struct Certificate {
-        string cid;
+        string publicProofCid;
+        bytes32 claimsRoot;
+        bytes32 instituteHash;
         address verifier;
-        uint256 issuedAt;
+        uint64 issuedAt;
+        uint64 expiresAt;
+        bool revoked;
+        bytes32 revocationReasonHash;
     }
 
     mapping(uint256 => Certificate) public certificates;
+
+    event CredentialRevoked(
+        uint256 indexed tokenId,
+        address indexed revoker,
+        bytes32 indexed reasonHash
+    );
 
     modifier onlyController() {
         require(msg.sender == mintController, "Not authorized");
         _;
     }
 
-    constructor()
-        ERC721("ProofOfCourseToken", "PoCT")
-        Ownable(msg.sender)
-    {}
+    constructor() ERC721("ProofOfCourseToken", "PoCT") Ownable(msg.sender) {}
 
-    function setMintController(address _controller) external onlyOwner {
-        mintController = _controller;
+    function setMintController(address controller) external onlyOwner {
+        require(controller != address(0), "Invalid controller");
+        mintController = controller;
     }
 
     function mint(
         address student,
-        string memory cid,
-        address verifier
+        string memory publicProofCid,
+        bytes32 claimsRoot,
+        bytes32 instituteHash,
+        address verifier,
+        uint64 expiresAt
     ) external onlyController returns (uint256) {
+        require(student != address(0), "Invalid student");
+        require(bytes(publicProofCid).length > 0, "Missing proof CID");
+        require(claimsRoot != bytes32(0), "Missing claims root");
+        require(instituteHash != bytes32(0), "Missing institute hash");
+        require(verifier != address(0), "Invalid verifier");
 
-        _tokenIds++;
+        _tokenIds += 1;
         uint256 newTokenId = _tokenIds;
 
         _safeMint(student, newTokenId);
 
         certificates[newTokenId] = Certificate({
-            cid: cid,
+            publicProofCid: publicProofCid,
+            claimsRoot: claimsRoot,
+            instituteHash: instituteHash,
             verifier: verifier,
-            issuedAt: block.timestamp
+            issuedAt: uint64(block.timestamp),
+            expiresAt: expiresAt,
+            revoked: false,
+            revocationReasonHash: bytes32(0)
         });
 
         return newTokenId;
+    }
+
+    function revoke(uint256 tokenId, bytes32 reasonHash) external onlyController {
+        require(_ownerOf(tokenId) != address(0), "Certificate not found");
+        Certificate storage certificate = certificates[tokenId];
+        require(!certificate.revoked, "Credential already revoked");
+
+        certificate.revoked = true;
+        certificate.revocationReasonHash = reasonHash;
+
+        emit CredentialRevoked(tokenId, msg.sender, reasonHash);
+    }
+
+    function instituteHashOf(uint256 tokenId) external view returns (bytes32) {
+        require(_ownerOf(tokenId) != address(0), "Certificate not found");
+        return certificates[tokenId].instituteHash;
+    }
+
+    function credentialStatus(uint256 tokenId) public view returns (uint8) {
+        require(_ownerOf(tokenId) != address(0), "Certificate not found");
+
+        Certificate storage certificate = certificates[tokenId];
+
+        if (certificate.revoked) {
+            return uint8(CredentialStatus.Revoked);
+        }
+
+        if (
+            certificate.expiresAt != 0 &&
+            block.timestamp > uint256(certificate.expiresAt)
+        ) {
+            return uint8(CredentialStatus.Expired);
+        }
+
+        return uint8(CredentialStatus.Active);
     }
 
     function _update(address to, uint256 tokenId, address auth)

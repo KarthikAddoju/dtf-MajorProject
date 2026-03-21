@@ -15,6 +15,10 @@ import {
 } from "@/lib/formatting"
 import type { VerificationRecord } from "@/lib/types"
 
+function formatVerificationStatusLabel(value: string) {
+  return value.charAt(0).toUpperCase() + value.slice(1)
+}
+
 function VerifyPrintPageContent() {
   const searchParams = useSearchParams()
   const tokenId = searchParams.get("tokenId") ?? ""
@@ -143,7 +147,7 @@ function VerifyPrintPageContent() {
                   <p className="mt-5 max-w-2xl text-sm leading-7 text-slate-600">
                     This proof sheet resolves the public DACS verification record into a
                     printable review artifact with credential details, proof anchors,
-                    workflow context, and re-openable verification access.
+                    lifecycle status, and re-openable verification access.
                   </p>
                 </div>
 
@@ -189,6 +193,12 @@ function VerifyPrintPageContent() {
               </div>
               <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
                 <div className="text-xs uppercase tracking-[0.22em] text-slate-500">
+                  Expires At
+                </div>
+                <div className="mt-2 text-slate-900">{formatDateTime(record.expiresAt)}</div>
+              </div>
+              <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs uppercase tracking-[0.22em] text-slate-500">
                   EDU Reward
                 </div>
                 <div className="mt-2 text-slate-900">
@@ -199,18 +209,18 @@ function VerifyPrintPageContent() {
               </div>
               <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
                 <div className="text-xs uppercase tracking-[0.22em] text-slate-500">
-                  Evidence File
+                  Verification Status
                 </div>
-                <div className="mt-2 break-words text-slate-900">
-                  {record.fileName ?? "Not available"}
+                <div className="mt-2 text-slate-900">
+                  {formatVerificationStatusLabel(record.verificationStatus)}
                 </div>
               </div>
               <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
                 <div className="text-xs uppercase tracking-[0.22em] text-slate-500">
-                  Evidence Format
+                  Evidence Hash
                 </div>
-                <div className="mt-2 text-slate-900">
-                  {record.mimeType ?? "Not available"}
+                <div className="mt-2 break-all font-mono text-slate-900">
+                  {record.evidenceHash ?? "Not available"}
                 </div>
               </div>
             </section>
@@ -218,14 +228,24 @@ function VerifyPrintPageContent() {
             <section className="grid gap-4 border-t border-slate-200 px-8 py-8 lg:grid-cols-[1.15fr_0.85fr]">
               <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-5">
                 <div className="text-xs uppercase tracking-[0.22em] text-slate-500">
-                  Evidence Anchors
+                  Proof Anchors
                 </div>
                 <div className="mt-4 space-y-4 text-sm text-slate-700">
                   <div>
                     <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
-                      IPFS CID
+                      Public Proof CID
                     </div>
-                    <div className="mt-2 break-all font-mono text-slate-900">{record.cid}</div>
+                    <div className="mt-2 break-all font-mono text-slate-900">
+                      {record.publicProofCid}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                      Claims Root
+                    </div>
+                    <div className="mt-2 break-all font-mono text-slate-900">
+                      {record.claimsRoot}
+                    </div>
                   </div>
                   {record.txHash ? (
                     <div>
@@ -252,11 +272,11 @@ function VerifyPrintPageContent() {
                 </div>
                 <p className="mt-4 text-sm leading-7 text-slate-700">
                   The credential details above were resolved from the live PoCT
-                  contract and joined with workflow metadata captured during the
-                  institutional review lifecycle.
+                  contract and joined with immutable public proof metadata captured
+                  at mint time.
                 </p>
                 <div className="mt-4 rounded-[20px] border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
-                  Chain {record.proof.chainId} • Mint authority confirmed •{" "}
+                  Chain {record.proof.chainId} • {formatVerificationStatusLabel(record.verificationStatus)} •{" "}
                   {record.proof.soulbound ? "Non-transferable" : "Transferable"}
                 </div>
               </div>

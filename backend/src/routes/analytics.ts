@@ -3,6 +3,7 @@ import type { PipelineStage } from "mongoose";
 import { handleServerError, sendSuccess } from "../lib/api";
 import { InstituteModel } from "../models/Institute";
 import { CertificateSubmissionModel } from "../models/CertificateSubmission";
+import { toSubmissionResponse } from "../lib/submissionResponses";
 
 const router = Router();
 
@@ -146,21 +147,11 @@ router.get("/overview", async (_req, res) => {
         uniqueStudents: summary.uniqueStudents,
         leadInstituteName: colleges[0]?.instituteName ?? null,
         recentActivity: recentActivityRows.map((submission) => ({
-          id: String(submission._id),
-          tokenId: submission.tokenId ?? null,
-          courseName: submission.courseName,
-          credentialType: submission.credentialType ?? "course",
-          instituteName: submission.instituteName,
-          studentAddress: submission.studentAddress,
-          verifierAddress: submission.verifierAddress ?? null,
-          eduAmount: submission.eduAmount ?? null,
+          ...toSubmissionResponse(submission as never),
           mintedAt:
             submission.mintedAt?.toISOString() ??
             submission.reviewedAt?.toISOString() ??
             submission.uploadedAt.toISOString(),
-          cid: submission.cid,
-          txHash: submission.txHash ?? null,
-          ipfsUrl: `https://ipfs.io/ipfs/${submission.cid}`,
         })),
       },
     });

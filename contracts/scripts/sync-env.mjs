@@ -10,9 +10,15 @@ async function readDeployment() {
   return JSON.parse(fileContents);
 }
 
-function upsertEnvContent(existingContent, values) {
+function upsertEnvContent(existingContent, values, keysToRemove = []) {
   const lines = existingContent.split(/\r?\n/);
-  const nextLines = [...lines];
+  const nextLines = lines.filter((line) => {
+    if (!line.trim()) {
+      return true;
+    }
+
+    return !keysToRemove.some((key) => line.startsWith(`${key}=`));
+  });
 
   for (const [key, value] of Object.entries(values)) {
     const nextEntry = `${key}=${value}`;
@@ -28,7 +34,7 @@ function upsertEnvContent(existingContent, values) {
   return `${nextLines.filter(Boolean).join("\n")}\n`;
 }
 
-async function ensureEnvFile(filePath, exampleFilePath, values) {
+async function ensureEnvFile(filePath, exampleFilePath, values, keysToRemove = []) {
   let existingContent = "";
 
   try {
@@ -41,7 +47,7 @@ async function ensureEnvFile(filePath, exampleFilePath, values) {
     }
   }
 
-  const nextContent = upsertEnvContent(existingContent, values);
+  const nextContent = upsertEnvContent(existingContent, values, keysToRemove);
   await fs.writeFile(filePath, nextContent, "utf8");
   console.log(`Synced ${path.relative(repoRoot, filePath)}`);
 }
@@ -54,13 +60,12 @@ async function main() {
     path.join(repoRoot, "backend", ".env.example"),
     {
       RPC_URL: "http://127.0.0.1:8545",
-      BACKEND_SIGNER_PRIVATE_KEY:
-        "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
-      ADMIN_WALLET_ADDRESS: deployment.deployer,
+      ADMIN_WALLET_ADDRESSES: deployment.admin ?? deployment.deployer,
       POCT_ADDRESS: deployment.poctAddress,
       EDU_ADDRESS: deployment.eduAddress,
       MINT_CONTROLLER_ADDRESS: deployment.mintControllerAddress,
-    }
+    },
+    ["ADMIN_WALLET_ADDRESS", "BACKEND_SIGNER_PRIVATE_KEY"]
   );
 
   await ensureEnvFile(
@@ -70,8 +75,10 @@ async function main() {
       NEXT_PUBLIC_BACKEND_URL: "http://localhost:4000",
       NEXT_PUBLIC_APP_URL: "http://localhost:3000",
       NEXT_PUBLIC_RPC_URL: "http://127.0.0.1:8545",
+      NEXT_PUBLIC_CHAIN_ID: String(deployment.chainId ?? 31337),
       NEXT_PUBLIC_POCT_ADDRESS: deployment.poctAddress,
       NEXT_PUBLIC_EDU_ADDRESS: deployment.eduAddress,
+      NEXT_PUBLIC_MINT_CONTROLLER_ADDRESS: deployment.mintControllerAddress,
     }
   );
 }

@@ -123,16 +123,16 @@ export default function HomePage() {
         kind: "button" as const,
         label: "Connect Wallet To Start",
         description:
-          "Connect MetaMask first so DACS can restore your wallet identity and unlock signed student or admin flows.",
+          "Connect MetaMask first so DACS can restore your wallet identity and unlock signed student or reviewer flows.",
       }
     }
 
     if (!isSupportedNetwork) {
       return {
         kind: "button" as const,
-        label: "Switch To Hardhat And Sign In",
+        label: "Switch Network And Sign In",
         description:
-          "Your wallet is connected, but the network must be Hardhat localhost before upload, minting, and private dashboards can continue.",
+          "Your wallet is connected, but the configured DACS network must be selected before upload, minting, and private dashboards can continue.",
       }
     }
 
@@ -145,13 +145,13 @@ export default function HomePage() {
       }
     }
 
-    if (user?.role === "admin") {
+    if (user?.role === "admin" || user?.role === "verifier") {
       return {
         kind: "link" as const,
         href: "/admin",
-        label: "Open Admin Review Console",
+        label: "Open Review Console",
         description:
-          "Review pending submissions, approve or reject certificates, and mint PoCT plus EDU rewards.",
+          "Review pending submissions, prepare public proof payloads, and submit wallet-signed mint or revoke transactions.",
       }
     }
 
@@ -184,16 +184,16 @@ export default function HomePage() {
         cta: isAuthenticated && user?.role === "student" ? "Continue Student Flow" : "View Dashboard",
       },
       {
-        title: "Admin Journey",
+        title: "Reviewer Journey",
         eyebrow: "Verification Flow",
         accent: "text-[#f3d9a2]",
         steps: [
           "Open the review console and inspect the pending queue.",
-          "Preview the evidence file, assign reward amount, and leave a reviewer note.",
-          "Approve to mint the credential or reject with a tracked audit event.",
+          "Preview private evidence, assign reward amount, and prepare the public proof package.",
+          "Approve to submit a wallet-signed mint transaction or revoke with a tracked audit event.",
         ],
         href: "/admin",
-        cta: "Open Admin Console",
+        cta: "Open Review Console",
       },
       {
         title: "Public Trust Journey",
@@ -243,7 +243,9 @@ export default function HomePage() {
         value: isAuthenticated
           ? user?.role === "admin"
             ? "Admin authenticated"
-            : "Student authenticated"
+            : user?.role === "verifier"
+              ? "Verifier authenticated"
+              : "Student authenticated"
           : authFlowState === "awaiting_signature"
             ? "Awaiting signature"
             : authFlowState === "connecting_wallet"
@@ -276,8 +278,8 @@ export default function HomePage() {
   )
   const demoChecklist = useMemo(
     () => [
-      "Student signs in and submits academic credential evidence into IPFS-backed storage.",
-      "Admin reviews the evidence, adds a note, and mints PoCT plus EDU.",
+      "Student signs in and submits academic credential evidence into private encrypted storage.",
+      "An authorized reviewer prepares the public proof payload and submits the mint from their own wallet.",
       "Public verifier opens the token-backed record and scans the QR link.",
       "Student dashboard and college index reflect the minted outcome live.",
     ],
@@ -300,13 +302,13 @@ export default function HomePage() {
               </h1>
               <p className="mt-6 max-w-2xl text-lg leading-8 text-[#243246]">
                 DACS turns student achievement into a premium proof artifact: upload
-                into IPFS-backed storage, review through an admin console, mint a
-                soulbound credential, reward EDU, and publish a public verification
-                sheet that looks trustworthy on first glance.
+                into private encrypted storage, review through a wallet-driven
+                verification console, mint a soulbound credential, reward EDU, and
+                publish a public verification sheet that looks trustworthy on first glance.
               </p>
 
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-                {isAuthenticated && user?.role === "admin" ? (
+                {isAuthenticated && (user?.role === "admin" || user?.role === "verifier") ? (
                   <Link href="/admin" className="brand-button-primary px-6 py-4 text-base">
                     Open Review Command Desk
                   </Link>
@@ -378,7 +380,7 @@ export default function HomePage() {
                           Medium
                         </div>
                         <div className="mt-2 font-medium text-[#101828]">
-                          IPFS, MongoDB, and on-chain proof.
+                          Private evidence vault, MongoDB workflow, and on-chain proof.
                         </div>
                       </div>
                       <div>
@@ -386,7 +388,7 @@ export default function HomePage() {
                           Outcome
                         </div>
                         <div className="mt-2 font-medium text-[#101828]">
-                          A public credential sheet with evidence.
+                          A public credential sheet with proof, hashes, and status.
                         </div>
                       </div>
                     </div>
@@ -447,7 +449,10 @@ export default function HomePage() {
                     label: "Blockchain",
                     status: platformHealth?.services.blockchain.status ?? "degraded",
                   },
-                  { label: "IPFS", status: platformHealth?.services.ipfs.status ?? "missing" },
+                  {
+                    label: "Proof Storage",
+                    status: platformHealth?.services.ipfs.status ?? "missing",
+                  },
                   { label: "Auth", status: platformHealth?.services.auth.status ?? "warning" },
                 ].map((service) => (
                   <div
@@ -585,7 +590,7 @@ export default function HomePage() {
             </h2>
             <p className="mt-3 max-w-2xl text-[#243246]">
               DACS is strongest when the path feels intentional for whoever opens the
-              product first: student, admin, or public verifier.
+              product first: student, reviewer, or public verifier.
             </p>
 
             <div className="mt-8 space-y-4">
@@ -739,7 +744,7 @@ export default function HomePage() {
               />
               <FeatureCard
                 title="Operator-Grade Review Workflow"
-                description="Admins review evidence, assign EDU, reject with notes, and mint directly from a queue that feels like a real operations desk."
+                description="Admins and verifiers review evidence, assign EDU, reject with notes, and submit wallet-signed mint or revoke actions from a queue that feels like a real operations desk."
                 icon={
                   <svg className="h-7 w-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path
@@ -772,7 +777,11 @@ export default function HomePage() {
         <div className="brand-panel px-8 py-7">
           <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
             {[
-              { label: "Storage", value: "IPFS", detail: "Evidence lives on distributed storage" },
+              {
+                label: "Storage",
+                value: "Private vault + IPFS proof",
+                detail: "Evidence stays private while proof metadata stays public",
+              },
               { label: "Workflow", value: "MongoDB", detail: "Submission lifecycle is persisted off-chain" },
               { label: "Credential", value: "PoCT NFT", detail: "Soulbound academic proof record" },
               { label: "Rewards", value: "EDU Token", detail: "Student incentive rail for verified outcomes" },

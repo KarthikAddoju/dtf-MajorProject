@@ -39,6 +39,13 @@ export function getAuditTrailEventAccent(type: AuditTrailEventType) {
         icon:
           "border border-blue-500/30 bg-blue-500/10 text-blue-200",
       }
+    case "mint_prepared":
+      return {
+        badge:
+          "border border-amber-500/30 bg-amber-500/10 text-amber-200",
+        icon:
+          "border border-amber-500/30 bg-amber-500/10 text-amber-200",
+      }
     case "submission_rejected":
       return {
         badge:
@@ -52,6 +59,13 @@ export function getAuditTrailEventAccent(type: AuditTrailEventType) {
           "border border-emerald-500/30 bg-emerald-500/10 text-emerald-200",
         icon:
           "border border-emerald-500/30 bg-emerald-500/10 text-emerald-200",
+      }
+    case "submission_revoked":
+      return {
+        badge:
+          "border border-fuchsia-500/30 bg-fuchsia-500/10 text-fuchsia-200",
+        icon:
+          "border border-fuchsia-500/30 bg-fuchsia-500/10 text-fuchsia-200",
       }
   }
 }
@@ -60,10 +74,14 @@ export function getAuditTrailEventIcon(type: AuditTrailEventType) {
   switch (type) {
     case "submission_created":
       return "UP"
+    case "mint_prepared":
+      return "PR"
     case "submission_rejected":
       return "RJ"
     case "submission_minted":
       return "MT"
+    case "submission_revoked":
+      return "RV"
   }
 }
 

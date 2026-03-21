@@ -28,6 +28,12 @@ const instituteSchema = new Schema(
       default: true,
       index: true,
     },
+    verifierAddresses: {
+      type: [String],
+      default: () => [],
+      set: (addresses: string[]) =>
+        [...new Set(addresses.map((address) => address.trim().toLowerCase()))],
+    },
   },
   {
     timestamps: true,

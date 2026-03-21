@@ -3,16 +3,17 @@ interface ExportInput {
   studentAddress: string;
   verifierAddress: string;
   issuedAt: string;
-  cid: string;
+  expiresAt: string | null;
+  verificationStatus: string;
+  publicProofCid: string;
+  claimsRoot: string;
   courseName: string;
   credentialType: string;
   instituteName: string;
-  instituteSlug: string | null;
+  evidenceHash: string | null;
   eduAmount: number | null;
   txHash: string | null;
-  ipfsUrl: string;
-  fileName: string | null;
-  mimeType: string | null;
+  publicProofUrl: string | null;
   chainId: number;
   poctAddress: string;
   eduAddress: string;
@@ -101,7 +102,7 @@ export function buildCredentialExports(
   const issuer = buildIssuerProfile(
     frontendOrigin,
     input.instituteName,
-    input.instituteSlug
+    null
   );
   const subjectDid = toDidPkh(input.chainId, input.studentAddress);
   const credentialTypeLabel = formatCredentialTypeLabel(input.credentialType);
@@ -115,7 +116,11 @@ export function buildCredentialExports(
     mintControllerAddress: input.mintControllerAddress,
     tokenId: input.tokenId,
     txHash: input.txHash,
-    ipfsCid: input.cid,
+    publicProofCid: input.publicProofCid,
+    claimsRoot: input.claimsRoot,
+    evidenceHash: input.evidenceHash,
+    verificationStatus: input.verificationStatus,
+    expiresAt: input.expiresAt,
     soulbound: input.soulbound,
   };
   const sharedContext = [
@@ -127,7 +132,9 @@ export function buildCredentialExports(
       eduReward: `${normalizeOrigin(frontendOrigin)}/terms#eduReward`,
       tokenId: `${normalizeOrigin(frontendOrigin)}/terms#tokenId`,
       institute: `${normalizeOrigin(frontendOrigin)}/terms#institute`,
-      sourceCid: `${normalizeOrigin(frontendOrigin)}/terms#sourceCid`,
+      publicProofCid: `${normalizeOrigin(frontendOrigin)}/terms#publicProofCid`,
+      claimsRoot: `${normalizeOrigin(frontendOrigin)}/terms#claimsRoot`,
+      evidenceHash: `${normalizeOrigin(frontendOrigin)}/terms#evidenceHash`,
     },
   ];
 
@@ -162,18 +169,21 @@ export function buildCredentialExports(
       },
       tokenId: input.tokenId,
       credentialType: input.credentialType,
-      sourceCid: input.cid,
+      publicProofCid: input.publicProofCid,
+      claimsRoot: input.claimsRoot,
+      evidenceHash: input.evidenceHash,
       verificationPage,
       eduReward: input.eduAmount,
     },
     evidence: [
       {
-        id: input.ipfsUrl,
+        id: input.publicProofUrl ?? verificationPage,
         type: ["Evidence"],
-        name: input.fileName ?? `Evidence file for ${input.courseName}`,
-        description: `Original certificate evidence stored on IPFS with CID ${input.cid}.`,
-        genre: input.mimeType ?? "application/octet-stream",
-        narrative: `This evidence supports PoCT token #${input.tokenId} and the public verification page at ${verificationPage}.`,
+        name: `Public proof bundle for ${input.courseName}`,
+        description: `Immutable public proof metadata stored at CID ${input.publicProofCid}.`,
+        genre: "application/json",
+        narrative:
+          "The original evidence remains private; verification uses the public proof bundle, the evidence hash, and the on-chain claims root.",
       },
     ],
     proofAnchor,
@@ -213,19 +223,19 @@ export function buildCredentialExports(
     },
     evidence: [
       {
-        id: input.ipfsUrl,
+        id: input.publicProofUrl ?? verificationPage,
         type: ["Evidence"],
-        name: input.fileName ?? `${input.courseName} evidence`,
-        description: `Supporting evidence file stored on IPFS for ${input.courseName}.`,
-        genre: input.mimeType ?? "application/octet-stream",
-        narrative: `CID ${input.cid} supports this badge and resolves through the DACS verification page.`,
+        name: `${input.courseName} public proof bundle`,
+        description: `Supporting public proof metadata stored on IPFS for ${input.courseName}.`,
+        genre: "application/json",
+        narrative: `CID ${input.publicProofCid} supports this badge and resolves through the DACS verification page without exposing the original evidence file.`,
       },
     ],
     proofAnchor,
   };
 
   return {
-    note: "These exports follow the VC 2.0 and Open Badges 3.0 document models, but this DACS version does not yet attach a DID/Data Integrity issuer proof. Verifiability currently comes from the blockchain, the public verification page, and the IPFS evidence anchor.",
+    note: "These exports follow the VC 2.0 and Open Badges 3.0 document models, but this DACS version does not yet attach a DID/Data Integrity issuer proof. Verifiability currently comes from the blockchain, the claims root, and the immutable public proof bundle.",
     issuer,
     verifiableCredential,
     openBadgeCredential,

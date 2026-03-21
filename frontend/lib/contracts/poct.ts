@@ -7,7 +7,8 @@ export const POCT_ABI = [
   "function balanceOf(address owner) view returns (uint256)",
   "function ownerOf(uint256 tokenId) view returns (address)",
   "function tokenOfOwnerByIndex(address owner, uint256 index) view returns (uint256)",
-  "function certificates(uint256 tokenId) view returns (string cid, address verifier, uint256 issuedAt)",
+  "function certificates(uint256 tokenId) view returns (string publicProofCid, bytes32 claimsRoot, bytes32 instituteHash, address verifier, uint64 issuedAt, uint64 expiresAt, bool revoked, bytes32 revocationReasonHash)",
+  "function credentialStatus(uint256 tokenId) view returns (uint8)",
 ]
 
 export function getPoctReadContract() {
@@ -28,16 +29,31 @@ export async function getOwnedCertificates(
       index
     )) as bigint
     const certificate = (await contract.certificates(tokenId)) as {
-      cid: string
+      publicProofCid: string
       verifier: string
       issuedAt: bigint
+      expiresAt: bigint
     }
+    const verificationStatus = Number(
+      (await contract.credentialStatus(tokenId)) as bigint
+    )
 
     certificates.push({
       tokenId: tokenId.toString(),
-      cid: certificate.cid,
+      publicProofCid: certificate.publicProofCid,
+      cid: certificate.publicProofCid,
       verifierAddress: certificate.verifier.toLowerCase(),
       issuedAt: new Date(Number(certificate.issuedAt) * 1000).toISOString(),
+      expiresAt:
+        Number(certificate.expiresAt) > 0
+          ? new Date(Number(certificate.expiresAt) * 1000).toISOString()
+          : null,
+      verificationStatus:
+        verificationStatus === 2
+          ? "revoked"
+          : verificationStatus === 1
+            ? "expired"
+            : "active",
     })
   }
 

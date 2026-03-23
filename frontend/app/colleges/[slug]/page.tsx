@@ -113,13 +113,13 @@ export default function InstituteProfilePage() {
         </DashboardCard>
       ) : (
         <>
-          <section className="mb-10 rounded-[32px] border border-white/10 bg-[linear-gradient(135deg,rgba(184,137,45,0.14),rgba(15,118,110,0.1),rgba(12,16,24,0.96))] p-8 shadow-[0_24px_80px_rgba(8,12,18,0.28)]">
+          <section className="mb-10 rounded-xl border border-white/10 bg-[linear-gradient(135deg,rgba(79,126,245,0.10),rgba(52,211,153,0.08),rgba(12,16,24,0.96))] p-8 shadow-[0_24px_80px_rgba(8,12,18,0.28)]">
             <div className="flex flex-col gap-8 xl:flex-row xl:items-end xl:justify-between">
               <div className="max-w-4xl">
-                <div className="inline-flex items-center gap-2 rounded-full border border-[#b8892d]/30 bg-[#b8892d]/12 px-4 py-2 text-sm text-[#f3d9a2]">
+                <div className="inline-flex items-center gap-2 rounded-full border border-amber-500/25 bg-amber-500/10 text-amber-200">
                   Institute Trust Profile
                 </div>
-                <div className="mt-5 text-xs uppercase tracking-[0.34em] text-[#d4c3a3]">
+                <div className="mt-5 text-xs uppercase tracking-[0.12em] text-[#666666]">
                   {profile.institute.shortCode} • Public Academic Reputation Surface
                 </div>
                 <h1 className="mt-4 text-4xl font-semibold text-white sm:text-5xl">
@@ -153,7 +153,7 @@ export default function InstituteProfilePage() {
                   <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
                     Slug
                   </div>
-                  <div className="mt-2 font-mono text-sm text-[#b9e7df]">
+                  <div className="mt-2 font-mono text-sm text-[#a5c0f8]">
                     {profile.institute.slug}
                   </div>
                 </div>
@@ -165,7 +165,7 @@ export default function InstituteProfilePage() {
             <MetricCard
               title="EDU Minted"
               value={
-                <span className="text-[#f3d9a2]">
+                <span className="text-amber-200">
                   {profile.stats.totalEduMinted.toLocaleString()} EDU
                 </span>
               }
@@ -173,22 +173,22 @@ export default function InstituteProfilePage() {
             />
             <MetricCard
               title="Credentials"
-              value={<span className="text-[#dbeadd]">{profile.stats.mintedCredentials}</span>}
+              value={<span className="text-emerald-300">{profile.stats.mintedCredentials}</span>}
               accentColor="green"
             />
             <MetricCard
               title="Students"
-              value={<span className="text-[#c8dfdc]">{profile.stats.uniqueStudents}</span>}
+              value={<span className="text-[#a5c0f8]">{profile.stats.uniqueStudents}</span>}
               accentColor="blue"
             />
             <MetricCard
               title="Pending Review"
-              value={<span className="text-[#f3d9a2]">{profile.stats.pendingSubmissions}</span>}
+              value={<span className="text-amber-200">{profile.stats.pendingSubmissions}</span>}
               accentColor="yellow"
             />
             <MetricCard
               title="Rejected"
-              value={<span className="text-[#f0c5cc]">{profile.stats.rejectedSubmissions}</span>}
+              value={<span className="text-rose-300">{profile.stats.rejectedSubmissions}</span>}
               accentColor="purple"
             />
           </div>
@@ -248,7 +248,7 @@ export default function InstituteProfilePage() {
                     >
                       <div className="flex items-start justify-between gap-4">
                         <div className="min-w-0">
-                          <div className="text-xs uppercase tracking-[0.2em] text-[#f3d9a2]">
+                          <div className="text-xs uppercase tracking-[0.2em] text-amber-200">
                             Credential Rank #{index + 1}
                           </div>
                           <div className="mt-2 text-lg font-semibold text-white [overflow-wrap:anywhere]">
@@ -258,19 +258,19 @@ export default function InstituteProfilePage() {
                             <div className="text-sm text-slate-400">
                               {course.mintedCount} minted credentials
                             </div>
-                            <div className="rounded-full border border-[#b8892d]/20 bg-[#b8892d]/10 px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-[#f3d9a2]">
+                            <div className="rounded-full border border-white/[0.10] bg-white/[0.04] text-[#a0a0a0]">
                               {formatCredentialTypeLabel(course.credentialType)}
                             </div>
                           </div>
                         </div>
-                        <div className="rounded-full border border-[#0f766e]/30 bg-[#0f766e]/12 px-3 py-1 text-xs font-medium text-[#b9e7df]">
+                        <div className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-300">
                           {course.totalEduMinted.toLocaleString()} EDU
                         </div>
                       </div>
 
                       <div className="mt-4 h-2 overflow-hidden rounded-full bg-black/30">
                         <div
-                          className="h-full rounded-full bg-linear-to-r from-[#b8892d] via-[#0f766e] to-[#2f7b68]"
+                          className="h-full rounded-full bg-linear-to-r from-[#4f7ef5] via-emerald-500 to-emerald-600"
                           style={{ width: `${course.ratio}%` }}
                         />
                       </div>
@@ -313,7 +313,7 @@ export default function InstituteProfilePage() {
                             {credential.courseName}
                           </h3>
                           <div className="mt-2 flex flex-wrap gap-2">
-                            <div className="rounded-full border border-[#b8892d]/20 bg-[#b8892d]/10 px-3 py-1 text-xs uppercase tracking-[0.18em] text-[#f3d9a2]">
+                            <div className="rounded-full border border-white/[0.10] bg-white/[0.04] text-[#a0a0a0]">
                               {formatCredentialTypeLabel(credential.credentialType)}
                             </div>
                             <div className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs text-slate-300">
@@ -341,7 +341,7 @@ export default function InstituteProfilePage() {
                         {credential.tokenId ? (
                           <Link
                             href={`/verify?tokenId=${credential.tokenId}`}
-                            className="rounded-xl bg-linear-to-r from-[#b8892d] to-[#0f766e] px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
+                            className="rounded-xl bg-linear-to-r from-[#4f7ef5] to-emerald-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
                           >
                             Open Credential Sheet
                           </Link>

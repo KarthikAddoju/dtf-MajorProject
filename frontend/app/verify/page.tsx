@@ -6,11 +6,13 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { QRCodeSVG } from "qrcode.react"
 import { toast } from "sonner"
 import { AuditTrailList } from "@/components/AuditTrailList"
+import { DisclosureVerifier } from "@/components/DisclosureVerifier"
 import { CredentialShareCard } from "@/components/CredentialShareCard"
 import { DashboardCard } from "@/components/DashboardCard"
 import { EmptyStatePanel } from "@/components/EmptyStatePanel"
 import { PageLayout } from "@/components/PageLayout"
-import { fetchVerificationRecord, isAbortError } from "@/lib/api"
+import { SkeletonBlock } from "@/components/SkeletonBlock"
+import { ApiError, fetchVerificationRecord, isAbortError } from "@/lib/api"
 import { buildAppUrl } from "@/lib/config"
 import {
   formatCredentialTypeLabel,
@@ -56,6 +58,10 @@ function VerifyPageContent() {
   const [isLoading, setIsLoading] = useState(false)
   const [hasAttemptedLookup, setHasAttemptedLookup] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [errorCode, setErrorCode] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<"token" | "disclosure">(
+    searchParams.get("mode") === "disclosure" ? "disclosure" : "token"
+  )
 
   useEffect(() => {
     setSearchTokenId(tokenIdFromQuery)
@@ -64,6 +70,7 @@ function VerifyPageContent() {
       setRecord(null)
       setHasAttemptedLookup(false)
       setErrorMessage(null)
+      setErrorCode(null)
       return
     }
 
@@ -90,6 +97,7 @@ function VerifyPageContent() {
           error instanceof Error ? error.message : "Could not verify credential"
         setRecord(null)
         setErrorMessage(message)
+        setErrorCode(error instanceof ApiError ? error.code : null)
       } finally {
         if (!controller.signal.aborted) {
           setIsLoading(false)
@@ -254,17 +262,17 @@ function VerifyPageContent() {
       {
         label: "Token ID",
         value: `#${record.tokenId}`,
-        accent: "text-[#f7efe3]",
+        accent: "text-[#f0f0f0]",
       },
       {
         label: "Chain",
         value: `Hardhat ${record.proof.chainId}`,
-        accent: "text-[#d6edf8]",
+        accent: "text-[#a5c0f8]",
       },
       {
         label: "Share URL",
         value: shareUrl ?? buildAppUrl(`/verify?tokenId=${record.tokenId}`),
-        accent: "font-mono text-xs text-cyan-200",
+        accent: "font-mono text-xs text-[#a5c0f8]",
       },
     ]
   }, [record, shareUrl])
@@ -403,6 +411,53 @@ function VerifyPageContent() {
         </p>
       </section>
 
+      <div className="print-hidden mx-auto mb-6 max-w-3xl">
+        <div className="flex gap-1 rounded-xl border border-white/[0.08] bg-white/[0.03] p-1">
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab("token")
+              const p = new URLSearchParams(searchParams.toString())
+              p.delete("mode")
+              const q = p.toString()
+              router.replace(q ? `/verify?${q}` : "/verify", { scroll: false })
+            }}
+            className={`flex-1 cursor-pointer rounded-lg px-4 py-2.5 text-sm font-medium transition ${
+              activeTab === "token"
+                ? "bg-[#1d2b4a] text-[#a5c0f8]"
+                : "text-[#666666] hover:text-[#f0f0f0]"
+            }`}
+          >
+            Verify by Token ID
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab("disclosure")
+              const p = new URLSearchParams(searchParams.toString())
+              p.set("mode", "disclosure")
+              router.replace(`/verify?${p.toString()}`, { scroll: false })
+            }}
+            className={`flex-1 cursor-pointer rounded-lg px-4 py-2.5 text-sm font-medium transition ${
+              activeTab === "disclosure"
+                ? "bg-[#1d2b4a] text-[#a5c0f8]"
+                : "text-[#666666] hover:text-[#f0f0f0]"
+            }`}
+          >
+            Verify Disclosure Package
+          </button>
+        </div>
+      </div>
+
+      {activeTab === "disclosure" ? (
+        <div className="print-hidden mx-auto max-w-3xl py-4">
+          <DisclosureVerifier />
+        </div>
+      ) : null}
+
+      {activeTab === "token" ? (
+        <>
+
       <div className="print-hidden mx-auto mb-10 max-w-3xl">
         <DashboardCard>
           <form id="verify-record-form" onSubmit={handleSubmit} className="space-y-4">
@@ -434,12 +489,9 @@ function VerifyPageContent() {
       </div>
 
       {isLoading ? (
-        <div className="print-hidden mx-auto max-w-4xl">
-          <DashboardCard>
-            <div className="py-12 text-center text-slate-300">
-              Reading blockchain credential data...
-            </div>
-          </DashboardCard>
+        <div className="print-hidden mx-auto max-w-4xl space-y-4">
+          <SkeletonBlock variant="card" lines={5} />
+          <SkeletonBlock variant="card" lines={4} />
         </div>
       ) : null}
 
@@ -456,7 +508,7 @@ function VerifyPageContent() {
                     <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.25em] text-emerald-200 print-accent-text">
                       Verified Academic Credential
                     </div>
-                    <div className="ml-0 mt-2 inline-flex items-center gap-2 rounded-full border border-[#b8892d]/20 bg-[#b8892d]/10 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.22em] text-[#f3d9a2]">
+                    <div className="ml-0 mt-2 inline-flex items-center gap-2 rounded-full border border-white/[0.10] bg-white/[0.04] px-3 py-1 text-[11px] font-medium uppercase tracking-[0.22em] text-amber-200">
                       {formatCredentialTypeLabel(record.credentialType)}
                     </div>
                     <div className="text-xs uppercase tracking-[0.32em] text-slate-500 print-accent-text">
@@ -516,7 +568,7 @@ function VerifyPageContent() {
                   <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
                     Student Wallet
                   </div>
-                  <div className="mt-2 break-all font-mono text-cyan-200 print-mono-text">
+                  <div className="mt-2 break-all font-mono text-[#a5c0f8] print-mono-text">
                     {record.studentAddress}
                   </div>
                 </div>
@@ -598,7 +650,7 @@ function VerifyPageContent() {
                       <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
                         Public Proof CID
                       </div>
-                      <div className="mt-2 break-all font-mono text-cyan-200 print-mono-text">
+                      <div className="mt-2 break-all font-mono text-[#a5c0f8] print-mono-text">
                         {record.publicProofCid}
                       </div>
                     </div>
@@ -756,7 +808,7 @@ function VerifyPageContent() {
                         <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
                           Share URL
                         </div>
-                        <div className="mt-2 break-all font-mono text-xs text-cyan-200">
+                        <div className="mt-2 break-all font-mono text-xs text-[#a5c0f8]">
                           {shareUrl}
                         </div>
                       </div>
@@ -776,7 +828,7 @@ function VerifyPageContent() {
                           onClick={() =>
                             void handleCopyShareUrl(shareUrl ?? buildAppUrl("/verify"))
                           }
-                          className="rounded-xl border border-[#8bbbd5]/24 bg-[#8bbbd5]/10 px-4 py-3 text-sm font-medium text-[#d6edf8] transition hover:bg-[#8bbbd5]/18"
+                          className="rounded-xl border border-[#4f7ef5]/20 bg-[#4f7ef5]/08 px-4 py-3 text-sm font-medium text-[#a5c0f8] transition hover:bg-[#4f7ef5]/12"
                         >
                           Copy Verification Link
                         </button>
@@ -791,7 +843,7 @@ function VerifyPageContent() {
                         <button
                           type="button"
                           onClick={() => void handleCopyShareCaption()}
-                          className="rounded-xl border border-[#b8892d]/25 bg-[#b8892d]/10 px-4 py-3 text-sm font-medium text-[#f3d9a2] transition hover:bg-[#b8892d]/18"
+                          className="rounded-xl border border-white/[0.10] bg-white/[0.04] px-4 py-3 text-sm font-medium text-amber-200 transition hover:bg-white/[0.08]"
                         >
                           Copy Share Caption
                         </button>
@@ -820,14 +872,14 @@ function VerifyPageContent() {
                         <button
                           type="button"
                           onClick={handleDownloadProofBundle}
-                          className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-4 py-3 text-sm font-medium text-cyan-200 transition hover:bg-cyan-500/20"
+                          className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-4 py-3 text-sm font-medium text-[#a5c0f8] transition hover:bg-cyan-500/20"
                         >
                           Download Proof Bundle
                         </button>
                         <button
                           type="button"
                           onClick={handleDownloadVerifiableCredential}
-                          className="rounded-xl border border-[#b8892d]/25 bg-[#b8892d]/10 px-4 py-3 text-sm font-medium text-[#f3d9a2] transition hover:bg-[#b8892d]/18"
+                          className="rounded-xl border border-white/[0.10] bg-white/[0.04] px-4 py-3 text-sm font-medium text-amber-200 transition hover:bg-white/[0.08]"
                         >
                           Download VC JSON-LD
                         </button>
@@ -863,14 +915,24 @@ function VerifyPageContent() {
       ) : null}
 
       {!isLoading && hasAttemptedLookup && !record ? (
-        <div className="print-hidden mx-auto max-w-3xl">
+        <div className="print-hidden mx-auto max-w-3xl space-y-4">
           <DashboardCard>
             <EmptyStatePanel
               eyebrow="Verification failed"
-              title="No credential record matched that token"
+              title={
+                errorCode === "CERTIFICATE_NOT_FOUND"
+                  ? "Token not found on this chain"
+                  : "No credential record matched that token"
+              }
               description={
-                errorMessage ??
-                "No blockchain credential record was found for that token ID."
+                errorCode === "CERTIFICATE_NOT_FOUND"
+                  ? `Token #${tokenIdFromQuery} does not exist on the current network.`
+                  : (errorMessage ?? "No blockchain credential record was found for that token ID.")
+              }
+              icon={
+                <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+                </svg>
               }
               action={
                 <div className="flex flex-wrap justify-center gap-3">
@@ -879,6 +941,7 @@ function VerifyPageContent() {
                     onClick={() => {
                       setSearchTokenId("")
                       setErrorMessage(null)
+                      setErrorCode(null)
                       router.replace("/verify")
                     }}
                     className="brand-button-secondary px-4 py-3 text-sm"
@@ -886,15 +949,27 @@ function VerifyPageContent() {
                     Clear Search
                   </button>
                   <Link
-                    href="/colleges"
+                    href="/dashboard"
                     className="brand-button-primary px-4 py-3 text-sm"
                   >
-                    Explore Institute Index
+                    Back to Dashboard
                   </Link>
                 </div>
               }
             />
           </DashboardCard>
+
+          {errorCode === "CERTIFICATE_NOT_FOUND" ? (
+            <div className="rounded-xl border border-amber-500/20 bg-amber-500/06 p-4 text-sm">
+              <div className="font-semibold text-amber-200">Running a local Hardhat network?</div>
+              <p className="mt-1 text-[#a0a0a0]">
+                Restarting Hardhat resets the chain, so tokens from previous sessions no longer
+                exist on-chain. If your dashboard shows this token as &quot;minted&quot;, that record is
+                from MongoDB and is now stale. Mint a fresh credential after restart to get a
+                working proof sheet.
+              </p>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -925,21 +1000,27 @@ function VerifyPageContent() {
         </div>
       ) : null}
 
+        </> ) : null}
+
       <div className="brand-mobile-action-dock print-hidden lg:hidden">
         <div className="brand-mobile-action-dock__inner flex items-center justify-between gap-4 px-4 py-4">
           <div className="min-w-0">
-            <div className="text-[11px] uppercase tracking-[0.22em] text-[#8ea0b8]">
-              {record ? "Credential actions" : "Verification input"}
+            <div className="text-[11px] uppercase tracking-[0.22em] text-[#a0a0a0]">
+              {activeTab === "disclosure"
+                ? "Disclosure verifier"
+                : record ? "Credential actions" : "Verification input"}
             </div>
-            <div className="mt-1 text-sm text-[#f7efe3]">
-              {record
-                ? `Token #${record.tokenId} ready to share`
-                : searchTokenId.trim()
-                  ? `Token ${searchTokenId.trim()} ready`
-                  : "Enter a token ID to verify"}
+            <div className="mt-1 text-sm text-[#f0f0f0]">
+              {activeTab === "disclosure"
+                ? "Paste a package JSON and tap Verify Claims"
+                : record
+                  ? `Token #${record.tokenId} ready to share`
+                  : searchTokenId.trim()
+                    ? `Token ${searchTokenId.trim()} ready`
+                    : "Enter a token ID to verify"}
             </div>
           </div>
-          {record ? (
+          {activeTab === "disclosure" ? null : record ? (
             <div className="flex shrink-0 gap-2">
               <button
                 type="button"
@@ -968,6 +1049,7 @@ function VerifyPageContent() {
           )}
         </div>
       </div>
+
     </PageLayout>
   )
 }

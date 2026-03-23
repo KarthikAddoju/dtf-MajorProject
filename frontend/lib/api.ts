@@ -2,10 +2,12 @@
 
 import { buildBackendUrl } from "@/lib/config"
 import type {
+  AiInsight,
   AnalyticsOverview,
   AuthUser,
   CollegeLeaderboardEntry,
   DisclosurePackage,
+  SavedDisclosureRecord,
   FinalizeMintResult,
   Institute,
   InstituteProfile,
@@ -342,6 +344,13 @@ export async function createDisclosurePackage(
   })
 }
 
+export async function fetchMyDisclosures(token: string, signal?: AbortSignal) {
+  return apiRequest<{ disclosures: SavedDisclosureRecord[] }>(
+    "/api/credentials/disclosures",
+    { token, signal }
+  )
+}
+
 export async function fetchEvidenceBlob(
   token: string,
   submissionId: string,
@@ -367,6 +376,27 @@ export async function fetchEvidenceBlob(
   }
 
   return response.blob()
+}
+
+export async function analyseEvidence(
+  token: string,
+  submissionId: string
+): Promise<AiInsight> {
+  const response = await fetch(
+    buildBackendUrl(`/api/evidence/${submissionId}/analyse`),
+    {
+      method: "POST",
+      headers: buildHeaders(token),
+      cache: "no-store",
+    }
+  )
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({})) as { error?: string }
+    throw new Error(body.error ?? "Certificate analysis failed")
+  }
+
+  return response.json() as Promise<AiInsight>
 }
 
 export async function uploadCertificate(

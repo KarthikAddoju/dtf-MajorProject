@@ -8,6 +8,8 @@ interface EmptyStatePanelProps {
   eyebrow?: string
   tone?: "dark" | "light"
   action?: ReactNode
+  icon?: ReactNode
+  size?: "sm" | "md"
 }
 
 export function EmptyStatePanel({
@@ -16,27 +18,37 @@ export function EmptyStatePanel({
   eyebrow = "Nothing here yet",
   tone = "dark",
   action,
+  icon,
+  size = "md",
 }: EmptyStatePanelProps) {
   const shellClassName =
     tone === "light"
-      ? "rounded-[28px_14px_28px_14px] border border-[#101828]/12 bg-[rgba(255,255,255,0.82)] p-8 text-center"
-      : "rounded-[28px_14px_28px_14px] border border-white/10 bg-white/[0.03] p-8 text-center"
-  const eyebrowClassName =
+      ? "rounded-xl border border-white/[0.08] bg-[#242424] p-8 text-center"
+      : "rounded-xl border border-white/[0.08] bg-white/[0.03] p-8 text-center"
+  const eyebrowClassName = "text-[#666666]"
+  const titleClassName = "text-[#f0f0f0]"
+  const descriptionClassName = "text-[#a0a0a0]"
+  const iconContainerClassName =
     tone === "light"
-      ? "text-[#5f7f68]"
-      : "text-[#8ea0b8]"
-  const titleClassName = tone === "light" ? "text-[#101828]" : "text-white"
-  const descriptionClassName =
-    tone === "light" ? "text-[#425168]" : "text-slate-400"
+      ? "border border-white/[0.08] bg-[#2a2a2a] text-[#a0a0a0]"
+      : "border border-white/[0.08] bg-white/[0.04] text-[#a0a0a0]"
+  const iconSizeClassName = size === "sm" ? "h-12 w-12" : "h-16 w-16"
 
   return (
     <div className={shellClassName}>
+      {icon ? (
+        <div
+          className={`mx-auto mb-5 flex items-center justify-center rounded-xl ${iconContainerClassName} ${iconSizeClassName}`}
+        >
+          {icon}
+        </div>
+      ) : null}
       <div
-        className={`text-[11px] uppercase tracking-[0.28em] ${eyebrowClassName}`}
+        className={`text-[11px] tracking-[0.06em] ${eyebrowClassName}`}
       >
         {eyebrow}
       </div>
-      <h3 className={`display-serif mt-3 text-[2rem] font-semibold ${titleClassName}`}>
+      <h3 className={`mt-3 text-[2rem] font-semibold ${titleClassName}`}>
         {title}
       </h3>
       <p className={`mx-auto mt-3 max-w-2xl leading-7 ${descriptionClassName}`}>

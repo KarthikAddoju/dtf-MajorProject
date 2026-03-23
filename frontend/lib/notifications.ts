@@ -11,6 +11,8 @@ export interface SubmissionNotification {
   timestamp: string
   href: string
   ctaLabel: string
+  /** Token ID of the minted credential — only set for minted notifications. */
+  tokenId?: string
 }
 
 function getNotificationTimestamp(submission: Submission) {
@@ -38,6 +40,7 @@ export function buildSubmissionNotifications(submissions: Submission[]) {
           timestamp: submission.mintedAt ?? submission.reviewedAt ?? submission.uploadedAt,
           href: submission.tokenId ? `/verify?tokenId=${submission.tokenId}` : "/dashboard",
           ctaLabel: "Open Proof Sheet",
+          tokenId: submission.tokenId ?? undefined,
         }
       }
 

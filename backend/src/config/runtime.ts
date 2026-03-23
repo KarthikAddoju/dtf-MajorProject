@@ -123,6 +123,7 @@ export const runtimeConfig = {
   privateEvidenceDir: readEnv("PRIVATE_EVIDENCE_DIR") ?? "private-evidence",
   requestBodyLimit: readEnv("REQUEST_BODY_LIMIT") ?? "1mb",
   seedDefaultInstitutes: readEnv("SEED_DEFAULT_INSTITUTES") !== "false",
+  geminiApiKey: readEnv("GEMINI_API_KEY") ?? null,
 } as const;
 
 export function isAdminWallet(address: string) {

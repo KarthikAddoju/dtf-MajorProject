@@ -5,16 +5,16 @@ interface RoleBadgeProps {
 export function RoleBadge({ role }: RoleBadgeProps) {
   const styles = {
     student:
-      "border border-[#8bbbd5]/20 bg-[#8bbbd5]/10 text-[#d8ebf5] before:bg-[#8bbbd5]",
+      "border border-[#4f7ef5]/25 bg-[#4f7ef5]/10 text-[#a5c0f8] before:bg-[#4f7ef5]",
     admin:
-      "border border-[#d25b36]/25 bg-[#d25b36]/10 text-[#ffd7c8] before:bg-[#d25b36]",
+      "border border-rose-500/25 bg-rose-500/10 text-rose-300 before:bg-rose-400",
     verifier:
-      "border border-[#b8892d]/25 bg-[#b8892d]/10 text-[#f3d9a2] before:bg-[#b8892d]",
+      "border border-amber-500/25 bg-amber-500/10 text-amber-200 before:bg-amber-400",
   }
 
   return (
     <span
-      className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] before:h-1.5 before:w-1.5 before:rounded-full ${styles[role]}`}
+      className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium before:h-1.5 before:w-1.5 before:rounded-full ${styles[role]}`}
     >
       {role.charAt(0).toUpperCase() + role.slice(1)}
     </span>

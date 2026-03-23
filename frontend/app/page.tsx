@@ -6,6 +6,8 @@ import { PageLayout } from "@/components/PageLayout"
 import { FeatureCard } from "@/components/FeatureCard"
 import { StatusBanner } from "@/components/StatusBanner"
 import { useAuth } from "@/components/AuthProvider"
+import { useCountUp } from "@/hooks/use-count-up"
+import { useInViewport } from "@/hooks/use-in-viewport"
 import {
   fetchAnalyticsOverview,
   fetchPlatformHealth,
@@ -19,6 +21,30 @@ import {
 import { getWalletNetworkLabel, getWalletSignInLabel } from "@/lib/wallet"
 import type { AnalyticsOverview, PlatformHealth } from "@/lib/types"
 
+function StatCounter({
+  value,
+  label,
+}: {
+  value: number | null
+  label: string
+}) {
+  const { ref, inView } = useInViewport()
+  const animated = useCountUp(value ?? 0, 1200, inView && value !== null)
+  return (
+    <div
+      ref={ref}
+      className="rounded-xl border border-white/[0.08] bg-[#2a2a2a] px-5 py-5 shadow-[0_12px_30px_rgba(8,12,20,0.08)]"
+    >
+      <div className="text-[11px] uppercase tracking-[0.28em] text-[#666666]">
+        {label}
+      </div>
+      <div className="mt-3 text-[1.85rem] leading-none text-[#f0f0f0]">
+        {value !== null ? animated.toLocaleString() : "—"}
+      </div>
+    </div>
+  )
+}
+
 function getStatusStyles(status: string) {
   switch (status) {
     case "ok":
@@ -26,7 +52,7 @@ function getStatusStyles(status: string) {
     case "connected":
       return "border-[#0f766e]/30 bg-[#0f766e]/12 text-[#c9f0e7]"
     case "warning":
-      return "border-[#b8892d]/30 bg-[#b8892d]/12 text-[#f3d9a2]"
+      return "border-amber-500/25 bg-amber-500/10 text-amber-200"
     default:
       return "border-[#7f2f47]/30 bg-[#7f2f47]/12 text-[#efc2cf]"
   }
@@ -83,29 +109,6 @@ export default function HomePage() {
     return () => controller.abort()
   }, [])
 
-  const heroStats = useMemo(
-    () => [
-      {
-        label: "Live Colleges",
-        value:
-          analyticsOverview !== null
-            ? analyticsOverview.activeInstitutes.toLocaleString()
-            : "Ready",
-      },
-      {
-        label: "EDU Minted",
-        value:
-          analyticsOverview !== null
-            ? `${analyticsOverview.totalEduMinted.toLocaleString()}+`
-            : "Growing",
-      },
-      {
-        label: "Top Institute",
-        value: analyticsOverview?.leadInstituteName ?? "Leaderboard Live",
-      },
-    ],
-    [analyticsOverview]
-  )
   const networkLabel = getWalletNetworkLabel(chainId)
   const recommendedAction = useMemo(() => {
     if (!hasWalletProvider) {
@@ -174,7 +177,7 @@ export default function HomePage() {
       {
         title: "Student Journey",
         eyebrow: "Submission Flow",
-        accent: "text-[#9ad8cf]",
+        accent: "text-emerald-300",
         steps: [
           "Connect wallet and sign in with MetaMask.",
           "Drag and drop a certificate into the upload workspace.",
@@ -186,7 +189,7 @@ export default function HomePage() {
       {
         title: "Reviewer Journey",
         eyebrow: "Verification Flow",
-        accent: "text-[#f3d9a2]",
+        accent: "text-amber-200",
         steps: [
           "Open the review console and inspect the pending queue.",
           "Preview private evidence, assign reward amount, and prepare the public proof package.",
@@ -198,7 +201,7 @@ export default function HomePage() {
       {
         title: "Public Trust Journey",
         eyebrow: "Verification Flow",
-        accent: "text-[#d8c39e]",
+        accent: "text-[#a0a0a0]",
         steps: [
           "Verify a credential by token ID on the public page.",
           "Inspect lifecycle evidence, proof contracts, and QR-linked shareable output.",
@@ -217,7 +220,7 @@ export default function HomePage() {
         value: hasWalletProvider ? "MetaMask detected" : "MetaMask not detected",
         tone: hasWalletProvider
           ? "border-[#0f766e]/30 bg-[#0f766e]/12 text-[#c9f0e7]"
-          : "border-[#b8892d]/30 bg-[#b8892d]/12 text-[#f3d9a2]",
+          : "border-amber-500/25 bg-amber-500/10 text-amber-200",
       },
       {
         label: "Connected Wallet",
@@ -225,7 +228,7 @@ export default function HomePage() {
           ? `${connectedWalletAddress.slice(0, 8)}...${connectedWalletAddress.slice(-6)}`
           : "Not connected",
         tone: connectedWalletAddress
-          ? "border-[#b8892d]/30 bg-[#b8892d]/12 text-[#f3d9a2]"
+          ? "border-amber-500/25 bg-amber-500/10 text-amber-200"
           : "border-[#3a3020]/70 bg-black/20 text-[#d3cdc1]",
       },
       {
@@ -235,7 +238,7 @@ export default function HomePage() {
           connectedWalletAddress && isSupportedNetwork
             ? "border-[#0f766e]/30 bg-[#0f766e]/12 text-[#c9f0e7]"
             : connectedWalletAddress
-              ? "border-[#b8892d]/30 bg-[#b8892d]/12 text-[#f3d9a2]"
+              ? "border-amber-500/25 bg-amber-500/10 text-amber-200"
               : "border-[#3a3020]/70 bg-black/20 text-[#d3cdc1]",
       },
       {
@@ -259,9 +262,9 @@ export default function HomePage() {
           ? "border-[#0f766e]/30 bg-[#0f766e]/12 text-[#c9f0e7]"
           : authFlowState === "awaiting_signature" ||
               authFlowState === "connecting_wallet"
-            ? "border-[#b8892d]/30 bg-[#b8892d]/12 text-[#f3d9a2]"
+            ? "border-amber-500/25 bg-amber-500/10 text-amber-200"
             : connectedWalletAddress
-              ? "border-[#8bbbd5]/30 bg-[#8bbbd5]/12 text-[#d8ebf5]"
+              ? "border-[#4f7ef5]/25 bg-[#4f7ef5]/10 text-[#a5c0f8]"
               : "border-[#3a3020]/70 bg-black/20 text-[#d3cdc1]",
       },
     ],
@@ -294,13 +297,13 @@ export default function HomePage() {
           <div className="brand-panel-light px-8 py-10 sm:px-10 lg:px-12">
             <div className="relative">
               <div className="brand-kicker">Credential Operating System</div>
-              <div className="mt-6 text-[11px] uppercase tracking-[0.34em] text-[#4f5966]">
+              <div className="mt-6 text-[11px] uppercase tracking-[0.34em] text-[#666666]">
                 DACS / Proof-first academic trust network
               </div>
-              <h1 className="display-serif mt-4 max-w-4xl text-5xl font-semibold leading-[0.94] text-[#101828] sm:text-6xl xl:text-[5.25rem]">
+              <h1 className="display-serif mt-4 max-w-4xl text-5xl font-semibold leading-[0.94] text-[#f0f0f0] sm:text-6xl xl:text-[5.25rem]">
                 Academic credentials that feel official, verify instantly, and carry evidence end to end.
               </h1>
-              <p className="mt-6 max-w-2xl text-lg leading-8 text-[#243246]">
+              <p className="mt-6 max-w-2xl text-lg leading-8 text-[#a0a0a0]">
                 DACS turns student achievement into a premium proof artifact: upload
                 into private encrypted storage, review through a wallet-driven
                 verification console, mint a soulbound credential, reward EDU, and
@@ -340,25 +343,28 @@ export default function HomePage() {
               </div>
 
               <div className="mt-10 grid gap-4 sm:grid-cols-3">
-                {heroStats.map((stat) => (
-                  <div
-                    key={stat.label}
-                    className="rounded-[26px_14px_26px_14px] border border-[#101828]/12 bg-[rgba(255,255,255,0.8)] px-5 py-5 shadow-[0_12px_30px_rgba(8,12,20,0.08)]"
-                  >
-                    <div className="text-[11px] uppercase tracking-[0.28em] text-[#4d596d]">
-                      {stat.label}
-                    </div>
-                    <div className="display-serif mt-3 text-[1.85rem] leading-none text-[#101828]">
-                      {stat.value}
-                    </div>
+                <StatCounter
+                  label="Live Colleges"
+                  value={analyticsOverview?.activeInstitutes ?? null}
+                />
+                <StatCounter
+                  label="EDU Minted"
+                  value={analyticsOverview?.totalEduMinted ?? null}
+                />
+                <div className="rounded-xl border border-white/[0.08] bg-[#2a2a2a] px-5 py-5 shadow-[0_12px_30px_rgba(8,12,20,0.08)]">
+                  <div className="text-[11px] uppercase tracking-[0.28em] text-[#666666]">
+                    Top Institute
                   </div>
-                ))}
+                  <div className="mt-3 text-[1.85rem] leading-none text-[#f0f0f0]">
+                    {analyticsOverview?.leadInstituteName ?? "Leaderboard Live"}
+                  </div>
+                </div>
               </div>
 
               <div className="mt-10 grid gap-5 lg:grid-cols-[1.05fr_0.95fr] lg:items-start">
-                <div className="rounded-[28px_14px_28px_14px] border border-[#101828]/12 bg-[rgba(255,255,255,0.82)] p-6">
+                <div className="rounded-xl border border-white/[0.08] bg-[#2a2a2a] p-6">
                   <div className="brand-chip-light">Why It Lands Well</div>
-                  <div className="mt-5 space-y-4 text-[#344255]">
+                  <div className="mt-5 space-y-4 text-[#a0a0a0]">
                     <p className="text-base leading-7">
                       This product is designed to make trust legible. Instead of
                       hiding the blockchain and backend behind “magic”, DACS exposes
@@ -368,26 +374,26 @@ export default function HomePage() {
                     <div className="brand-divider" />
                     <div className="grid gap-3 sm:grid-cols-3">
                       <div>
-                        <div className="text-[11px] uppercase tracking-[0.26em] text-[#6f563f]">
+                        <div className="text-[11px] uppercase tracking-[0.26em] text-[#666666]">
                           Thesis
                         </div>
-                        <div className="mt-2 font-medium text-[#101828]">
+                        <div className="mt-2 font-medium text-[#f0f0f0]">
                           Trust should travel with the credential.
                         </div>
                       </div>
                       <div>
-                        <div className="text-[11px] uppercase tracking-[0.26em] text-[#6f563f]">
+                        <div className="text-[11px] uppercase tracking-[0.26em] text-[#666666]">
                           Medium
                         </div>
-                        <div className="mt-2 font-medium text-[#101828]">
+                        <div className="mt-2 font-medium text-[#f0f0f0]">
                           Private evidence vault, MongoDB workflow, and on-chain proof.
                         </div>
                       </div>
                       <div>
-                        <div className="text-[11px] uppercase tracking-[0.26em] text-[#6f563f]">
+                        <div className="text-[11px] uppercase tracking-[0.26em] text-[#666666]">
                           Outcome
                         </div>
-                        <div className="mt-2 font-medium text-[#101828]">
+                        <div className="mt-2 font-medium text-[#f0f0f0]">
                           A public credential sheet with proof, hashes, and status.
                         </div>
                       </div>
@@ -396,22 +402,22 @@ export default function HomePage() {
                 </div>
 
                 <div className="brand-panel p-6">
-                  <div className="text-[11px] uppercase tracking-[0.28em] text-[#f5c88a]">
+                  <div className="text-[11px] uppercase tracking-[0.28em] text-[#a0a0a0]">
                     Proof Rail
                   </div>
-                  <div className="mt-3 display-serif text-[1.9rem] leading-tight text-[#f7efe3]">
+                  <div className="mt-3 text-[1.9rem] leading-tight text-[#f0f0f0]">
                     One flow, four trust checkpoints.
                   </div>
                   <div className="mt-6 space-y-3">
                     {demoChecklist.slice(0, 4).map((step, index) => (
                       <div
                         key={step}
-                        className="flex items-start gap-4 rounded-[22px_12px_22px_12px] border border-[#eedfce]/10 bg-[rgba(255,255,255,0.03)] p-4"
+                        className="flex items-start gap-4 rounded-xl border border-white/[0.06] bg-[rgba(255,255,255,0.03)] p-4"
                       >
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[16px] bg-[#f2e7d7] text-sm font-semibold text-[#101828]">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[16px] bg-[#1d2b4a] text-sm font-semibold text-[#a5c0f8]">
                           {index + 1}
                         </div>
-                        <p className="text-[#d4dbea]">{step}</p>
+                        <p className="text-[#a0a0a0]">{step}</p>
                       </div>
                     ))}
                   </div>
@@ -424,10 +430,10 @@ export default function HomePage() {
             <div className="brand-panel p-7">
               <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                 <div>
-                  <div className="text-[11px] uppercase tracking-[0.3em] text-[#8bbbd5]">
+                  <div className="text-[11px] uppercase tracking-[0.3em] text-[#4f7ef5]">
                     Platform Health
                   </div>
-                  <h2 className="display-serif mt-2 text-[2rem] font-semibold text-[#f7efe3]">
+                  <h2 className="mt-2 text-[2rem] font-semibold text-[#f0f0f0]">
                     Live delivery stack
                   </h2>
                 </div>
@@ -457,9 +463,9 @@ export default function HomePage() {
                 ].map((service) => (
                   <div
                     key={service.label}
-                    className="rounded-[22px_12px_22px_12px] border border-[#eedfce]/10 bg-[rgba(255,255,255,0.03)] p-4"
+                    className="rounded-xl border border-white/[0.06] bg-[rgba(255,255,255,0.03)] p-4"
                   >
-                    <div className="text-[11px] uppercase tracking-[0.26em] text-[#8ea0b8]">
+                    <div className="text-[11px] uppercase tracking-[0.26em] text-[#a0a0a0]">
                       {service.label}
                     </div>
                     <div
@@ -474,10 +480,10 @@ export default function HomePage() {
 
             <div className="brand-panel p-7">
               <div className="mb-5 flex flex-col gap-2">
-                <div className="text-[11px] uppercase tracking-[0.3em] text-[#f5c88a]">
+                <div className="text-[11px] uppercase tracking-[0.3em] text-[#a0a0a0]">
                   Session Readiness
                 </div>
-                <h2 className="display-serif text-[2rem] font-semibold text-[#f7efe3]">
+                <h2 className="text-[2rem] font-semibold text-[#f0f0f0]">
                   Operate the right flow
                 </h2>
               </div>
@@ -486,9 +492,9 @@ export default function HomePage() {
                 {sessionTiles.map((tile) => (
                   <div
                     key={tile.label}
-                    className="rounded-[22px_12px_22px_12px] border border-[#eedfce]/10 bg-[rgba(255,255,255,0.03)] p-4"
+                    className="rounded-xl border border-white/[0.06] bg-[rgba(255,255,255,0.03)] p-4"
                   >
-                    <div className="text-[11px] uppercase tracking-[0.26em] text-[#8ea0b8]">
+                    <div className="text-[11px] uppercase tracking-[0.26em] text-[#a0a0a0]">
                       {tile.label}
                     </div>
                     <div className={`mt-3 inline-flex rounded-full border px-3 py-1.5 text-sm font-medium ${tile.tone}`}>
@@ -498,14 +504,14 @@ export default function HomePage() {
                 ))}
               </div>
 
-              <div className="mt-6 rounded-[24px_12px_24px_12px] border border-[#eedfce]/10 bg-[rgba(255,255,255,0.03)] p-5">
-                <div className="text-[11px] uppercase tracking-[0.26em] text-[#8ea0b8]">
+              <div className="mt-6 rounded-xl border border-white/[0.06] bg-[rgba(255,255,255,0.03)] p-5">
+                <div className="text-[11px] uppercase tracking-[0.26em] text-[#a0a0a0]">
                   Recommended Next Action
                 </div>
-                <h3 className="display-serif mt-3 text-[1.8rem] leading-tight text-[#f7efe3]">
+                <h3 className="mt-3 text-[1.8rem] leading-tight text-[#f0f0f0]">
                   {recommendedAction.label}
                 </h3>
-                <p className="mt-3 max-w-2xl text-[#c8d0de]">
+                <p className="mt-3 max-w-2xl text-[#a0a0a0]">
                   {recommendedAction.description}
                 </p>
                 <div className="mt-5">
@@ -555,13 +561,13 @@ export default function HomePage() {
 
         <div className="grid gap-8 xl:grid-cols-[0.92fr_1.08fr] xl:items-start">
           <div className="brand-panel p-8">
-            <div className="text-[11px] uppercase tracking-[0.3em] text-[#f5c88a]">
+            <div className="text-[11px] uppercase tracking-[0.3em] text-[#a0a0a0]">
               Demo Runbook
             </div>
-            <h2 className="display-serif mt-2 text-[2.4rem] font-semibold text-[#f7efe3]">
+            <h2 className="mt-2 text-[2.4rem] font-semibold text-[#f0f0f0]">
               Four beats for a confident final presentation
             </h2>
-            <p className="mt-3 max-w-2xl text-[#c8d0de]">
+            <p className="mt-3 max-w-2xl text-[#a0a0a0]">
               Use this sequence when you want DACS to feel like a finished trust
               product rather than a disconnected set of screens.
             </p>
@@ -570,25 +576,25 @@ export default function HomePage() {
               {demoChecklist.map((step, index) => (
                 <div
                   key={step}
-                  className="grid gap-4 rounded-[24px_12px_24px_12px] border border-[#eedfce]/10 bg-[rgba(255,255,255,0.03)] p-4 sm:grid-cols-[48px_1fr]"
+                  className="grid gap-4 rounded-xl border border-white/[0.06] bg-[rgba(255,255,255,0.03)] p-4 sm:grid-cols-[48px_1fr]"
                 >
-                  <div className="flex h-12 w-12 items-center justify-center rounded-[18px] bg-[rgba(242,231,215,0.92)] text-sm font-semibold text-[#101828]">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-[18px] bg-[#1d2b4a] text-sm font-semibold text-[#a5c0f8]">
                     {index + 1}
                   </div>
-                  <p className="self-center text-[#d8e0ec]">{step}</p>
+                  <p className="self-center text-[#a0a0a0]">{step}</p>
                 </div>
               ))}
             </div>
           </div>
 
           <div className="brand-panel-light p-8">
-            <div className="text-[11px] uppercase tracking-[0.3em] text-[#6f563f]">
+            <div className="text-[11px] uppercase tracking-[0.3em] text-[#666666]">
               Guided Product Paths
             </div>
-            <h2 className="display-serif mt-2 text-[2.4rem] font-semibold text-[#101828]">
+            <h2 className="mt-2 text-[2.4rem] font-semibold text-[#f0f0f0]">
               Each user type gets a distinct journey.
             </h2>
-            <p className="mt-3 max-w-2xl text-[#243246]">
+            <p className="mt-3 max-w-2xl text-[#a0a0a0]">
               DACS is strongest when the path feels intentional for whoever opens the
               product first: student, reviewer, or public verifier.
             </p>
@@ -597,21 +603,21 @@ export default function HomePage() {
               {guidedJourneys.map((journey) => (
                 <div
                   key={journey.title}
-                  className="rounded-[24px_12px_24px_12px] border border-[#101828]/12 bg-[rgba(255,255,255,0.82)] p-5 shadow-[0_12px_30px_rgba(8,12,20,0.06)]"
+                  className="rounded-xl border border-white/[0.08] bg-[#2a2a2a] p-5 shadow-[0_12px_30px_rgba(8,12,20,0.06)]"
                 >
                   <div className={`text-[11px] uppercase tracking-[0.3em] ${journey.accent}`}>
                     {journey.eyebrow}
                   </div>
-                  <h3 className="display-serif mt-2 text-[1.9rem] font-semibold text-[#101828]">
+                  <h3 className="mt-2 text-[1.9rem] font-semibold text-[#f0f0f0]">
                     {journey.title}
                   </h3>
                   <div className="mt-4 grid gap-3">
                     {journey.steps.map((step, index) => (
                       <div
                         key={step}
-                        className="grid gap-3 rounded-[18px_10px_18px_10px] border border-[#101828]/8 bg-white/55 p-3 text-sm text-[#405064] sm:grid-cols-[30px_1fr]"
+                        className="grid gap-3 rounded-xl border border-white/[0.06] bg-white/55 p-3 text-sm text-[#a0a0a0] sm:grid-cols-[30px_1fr]"
                       >
-                        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#101828] text-xs font-semibold text-[#f7efe3]">
+                        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#1a1a1a] text-xs font-semibold text-[#f0f0f0]">
                           {index + 1}
                         </div>
                         <p>{step}</p>
@@ -620,7 +626,7 @@ export default function HomePage() {
                   </div>
                   <Link
                     href={journey.href}
-                    className="mt-5 inline-flex rounded-full border border-[#101828]/12 bg-[#101828] px-4 py-2.5 text-sm font-semibold text-[#f7efe3] transition hover:bg-[#172136]"
+                    className="mt-5 inline-flex rounded-full border border-white/[0.08] bg-[#1a1a1a] px-4 py-2.5 text-sm font-semibold text-[#f0f0f0] transition hover:bg-[#172136]"
                   >
                     {journey.cta}
                   </Link>
@@ -633,13 +639,13 @@ export default function HomePage() {
         <div className="grid gap-8 xl:grid-cols-[1.05fr_0.95fr] xl:items-start">
           <div className="space-y-5">
             <div>
-              <div className="text-[11px] uppercase tracking-[0.3em] text-[#8bbbd5]">
+              <div className="text-[11px] uppercase tracking-[0.3em] text-[#4f7ef5]">
                 Live Credential Activity
               </div>
-              <h2 className="display-serif mt-3 text-[2.6rem] font-semibold text-[#f7efe3]">
+              <h2 className="mt-3 text-[2.6rem] font-semibold text-[#f0f0f0]">
                 Real issuance makes the trust layer feel alive.
               </h2>
-              <p className="mt-3 max-w-3xl text-[#c8d0de]">
+              <p className="mt-3 max-w-3xl text-[#a0a0a0]">
                 The fastest way to make a reviewer trust a product like DACS is to
                 show that it is not static. Credentials are being issued, rewards are
                 being minted, and public proof sheets resolve immediately.
@@ -654,33 +660,33 @@ export default function HomePage() {
                     className="brand-panel grid gap-4 p-6 sm:grid-cols-[1fr_auto]"
                   >
                     <div className="min-w-0">
-                      <div className="text-[11px] uppercase tracking-[0.26em] text-[#8bbbd5]">
+                      <div className="text-[11px] uppercase tracking-[0.26em] text-[#4f7ef5]">
                         {activity.tokenId ? `Token #${activity.tokenId}` : "Minted Record"}
                       </div>
-                      <h3 className="display-serif mt-2 text-[1.9rem] font-semibold text-[#f7efe3] [overflow-wrap:anywhere]">
+                      <h3 className="mt-2 text-[1.9rem] font-semibold text-[#f0f0f0] [overflow-wrap:anywhere]">
                         {activity.courseName}
                       </h3>
                       <div className="mt-2 flex flex-wrap items-center gap-2">
-                        <div className="text-sm text-[#b9c3d4]">{activity.instituteName}</div>
-                        <div className="rounded-full border border-[#b8892d]/20 bg-[#b8892d]/10 px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-[#f3d9a2]">
+                        <div className="text-sm text-[#a0a0a0]">{activity.instituteName}</div>
+                        <div className="rounded-full border border-white/[0.10] bg-white/[0.04] px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-amber-200">
                           {formatCredentialTypeLabel(activity.credentialType)}
                         </div>
                       </div>
 
-                      <div className="mt-5 grid gap-3 text-sm text-[#d8e0ec] sm:grid-cols-2">
-                        <div className="rounded-[18px_10px_18px_10px] border border-[#eedfce]/10 bg-[rgba(255,255,255,0.03)] p-3">
-                          <div className="text-[11px] uppercase tracking-[0.24em] text-[#8ea0b8]">
+                      <div className="mt-5 grid gap-3 text-sm text-[#a0a0a0] sm:grid-cols-2">
+                        <div className="rounded-xl border border-white/[0.06] bg-[rgba(255,255,255,0.03)] p-3">
+                          <div className="text-[11px] uppercase tracking-[0.24em] text-[#a0a0a0]">
                             Student
                           </div>
-                          <div className="mt-2 font-mono text-[#d5e7f1]">
+                          <div className="mt-2 font-mono text-[#a5c0f8]">
                             {truncateValue(activity.studentAddress, 10, 8)}
                           </div>
                         </div>
-                        <div className="rounded-[18px_10px_18px_10px] border border-[#eedfce]/10 bg-[rgba(255,255,255,0.03)] p-3">
-                          <div className="text-[11px] uppercase tracking-[0.24em] text-[#8ea0b8]">
+                        <div className="rounded-xl border border-white/[0.06] bg-[rgba(255,255,255,0.03)] p-3">
+                          <div className="text-[11px] uppercase tracking-[0.24em] text-[#a0a0a0]">
                             Minted At
                           </div>
-                          <div className="mt-2 text-[#f7efe3]">
+                          <div className="mt-2 text-[#f0f0f0]">
                             {formatDateTime(activity.mintedAt)}
                           </div>
                         </div>
@@ -688,7 +694,7 @@ export default function HomePage() {
                     </div>
 
                     <div className="flex flex-col justify-between gap-4">
-                      <div className="brand-chip w-fit self-start border-[#77997f]/22 bg-[#77997f]/10 text-[#d7ebd8]">
+                      <div className="brand-chip w-fit self-start border-emerald-500/18 bg-emerald-500/08 text-[#d7ebd8]">
                         {activity.eduAmount !== null
                           ? `${activity.eduAmount.toLocaleString()} EDU`
                           : "Reward pending"}
@@ -707,10 +713,10 @@ export default function HomePage() {
               </div>
             ) : (
               <div className="brand-panel p-8 text-center">
-                <h3 className="display-serif text-[2rem] font-semibold text-[#f7efe3]">
+                <h3 className="text-[2rem] font-semibold text-[#f0f0f0]">
                   Activity feed is primed for the next mint
                 </h3>
-                <p className="mt-3 text-[#c8d0de]">
+                <p className="mt-3 text-[#a0a0a0]">
                   Once a credential is approved and minted, it will appear here
                   with its token-backed verification link.
                 </p>
@@ -720,10 +726,10 @@ export default function HomePage() {
 
           <div className="space-y-5">
             <div>
-              <div className="text-[11px] uppercase tracking-[0.3em] text-[#f5c88a]">
+              <div className="text-[11px] uppercase tracking-[0.3em] text-[#a0a0a0]">
                 Product Edges
               </div>
-              <h2 className="display-serif mt-3 text-[2.6rem] font-semibold text-[#f7efe3]">
+              <h2 className="mt-3 text-[2.6rem] font-semibold text-[#f0f0f0]">
                 Designed to look credible before anyone reads the docs.
               </h2>
             </div>
@@ -788,15 +794,15 @@ export default function HomePage() {
             ].map((item) => (
               <div
                 key={item.label}
-                className="rounded-[22px_12px_22px_12px] border border-[#eedfce]/10 bg-[rgba(255,255,255,0.03)] p-5"
+                className="rounded-xl border border-white/[0.06] bg-[rgba(255,255,255,0.03)] p-5"
               >
-                <div className="text-[11px] uppercase tracking-[0.26em] text-[#8ea0b8]">
+                <div className="text-[11px] uppercase tracking-[0.26em] text-[#a0a0a0]">
                   {item.label}
                 </div>
-                <div className="display-serif mt-3 text-[2rem] text-[#f7efe3]">
+                <div className="mt-3 text-[2rem] text-[#f0f0f0]">
                   {item.value}
                 </div>
-                <div className="mt-2 text-sm text-[#c8d0de]">{item.detail}</div>
+                <div className="mt-2 text-sm text-[#a0a0a0]">{item.detail}</div>
               </div>
             ))}
           </div>

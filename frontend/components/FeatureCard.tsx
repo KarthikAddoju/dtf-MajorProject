@@ -9,14 +9,14 @@ interface FeatureCardProps {
 export function FeatureCard({ title, description, icon }: FeatureCardProps) {
   return (
     <div className="brand-panel brand-card-hover group p-8">
-      <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-[22px] border border-[#eedfce]/12 bg-[linear-gradient(145deg,rgba(210,91,54,0.16),rgba(131,188,217,0.14))] transition-transform duration-300 group-hover:scale-105">
-        <div className="text-[#ffe0c5]">{icon}</div>
+      <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-xl border border-white/[0.10] bg-[#1d2b4a] transition-transform duration-300 group-hover:scale-105">
+        <div className="text-[#a5c0f8]">{icon}</div>
       </div>
-      <div className="mb-4 h-px w-16 bg-gradient-to-r from-[#d25b36] to-[#8bbbd5]" />
-      <h3 className="display-serif mb-3 text-[1.55rem] font-semibold text-[#f4efe5] text-balance">
+      <div className="mb-4 h-px w-16 bg-gradient-to-r from-[#4f7ef5]/50 to-transparent" />
+      <h3 className="mb-3 text-[1.3rem] font-semibold tracking-tight text-[#f0f0f0] text-balance">
         {title}
       </h3>
-      <p className="leading-relaxed text-[#b4c0d1] text-pretty">{description}</p>
+      <p className="leading-relaxed text-[#a0a0a0] text-pretty">{description}</p>
     </div>
   )
 }

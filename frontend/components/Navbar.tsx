@@ -30,6 +30,8 @@ interface NavbarProps {
   walletWarning?: string | null
   onConnectWallet?: () => void | Promise<void>
   onLogout?: () => void
+  blockNumber?: number | null
+  isChainLive?: boolean
 }
 
 export function Navbar({
@@ -45,6 +47,8 @@ export function Navbar({
   walletWarning,
   onConnectWallet,
   onLogout,
+  blockNumber,
+  isChainLive = false,
 }: NavbarProps) {
   const pathname = usePathname()
   const networkLabel = getWalletNetworkLabel(chainId ?? null)
@@ -61,22 +65,26 @@ export function Navbar({
         : walletAddress
           ? "Wallet Connected"
           : "Guest Mode"
+
   const sessionTone = isAuthenticated
-    ? "border-[#8bbbd5]/20 bg-[#8bbbd5]/10 text-[#d8ebf5]"
+    ? "border-[#4f7ef5]/25 bg-[#4f7ef5]/10 text-[#a5c0f8]"
     : authFlowState === "awaiting_signature" || authFlowState === "connecting_wallet"
-      ? "border-[#f0c57f]/24 bg-[#f0c57f]/10 text-[#fde4b8]"
-    : walletAddress
-      ? "border-[#d25b36]/25 bg-[#d25b36]/10 text-[#ffd7c8]"
-      : "border-[#eedfce]/12 bg-[#101726]/72 text-[#d4dbeb]"
+      ? "border-amber-500/25 bg-amber-500/10 text-amber-200"
+      : walletAddress
+        ? "border-white/[0.12] bg-white/[0.04] text-[#a0a0a0]"
+        : "border-white/[0.08] bg-transparent text-[#666666]"
+
   const networkTone =
     chainId === null
-      ? "border-[#eedfce]/12 bg-[#101726]/72 text-[#d4dbeb]"
+      ? "border-white/[0.08] bg-transparent text-[#666666]"
       : isSupportedNetwork
-        ? "border-[#8bbbd5]/20 bg-[#8bbbd5]/10 text-[#d8ebf5]"
-        : "border-[#f0c57f]/24 bg-[#f0c57f]/10 text-[#fde4b8]"
+        ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-300"
+        : "border-amber-500/25 bg-amber-500/10 text-amber-200"
+
   const warningMessage = !hasWalletProvider
     ? "MetaMask was not detected in this browser. Install it to unlock upload, admin review, and signed dashboard flows."
     : walletWarning
+
   const walletActionLabel = getWalletSignInLabel(authFlowState, Boolean(walletAddress))
 
   const primaryAction =
@@ -89,136 +97,147 @@ export function Navbar({
         : null
 
   return (
-    <nav className="sticky top-4 z-50 w-full px-4 sm:px-6 lg:px-8">
+    <nav className="sticky top-0 z-50 w-full border-b border-white/[0.06] bg-[#111]/80 backdrop-blur-xl">
       <div className="mx-auto max-w-[1480px]">
-        <div className="overflow-hidden rounded-[30px_14px_30px_14px] border border-[#eedfce]/12 bg-[rgba(8,13,24,0.74)] shadow-[0_20px_56px_rgba(3,7,15,0.28)] backdrop-blur-2xl">
-          <div className="grid gap-4 px-5 py-5 xl:grid-cols-[auto_1fr_auto] xl:items-start">
-            <Link href="/" className="flex items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-[18px] bg-[linear-gradient(145deg,#f3eadc,#e0d1bd)] shadow-[0_16px_36px_rgba(5,10,20,0.16)]">
-                <svg
-                  className="h-6 w-6 text-[#101828]"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
-                  />
-                </svg>
-              </div>
-              <div>
-                <div className="display-serif text-[1.9rem] font-semibold leading-none text-[#f7efe3]">
-                  DACS
-                </div>
-                <div className="mt-1 text-[11px] uppercase tracking-[0.32em] text-[#92a4ba]">
-                  Academic Trust Ledger
-                </div>
-              </div>
-            </Link>
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-3 px-5 py-3 xl:flex-nowrap">
 
-            <div className="space-y-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <div
-                  className={`rounded-full border px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.2em] ${sessionTone}`}
-                >
-                  {sessionLabel}
-                </div>
-                <div
-                  className={`rounded-full border px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.2em] ${networkTone}`}
-                >
-                  {networkLabel}
-                </div>
-                {user?.role ? <RoleBadge role={user.role} /> : null}
-                {walletAddress ? (
-                  <WalletBadge
-                    address={walletAddress}
-                    label={isAuthenticated ? "Verified Wallet" : "Connected Wallet"}
-                  />
-                ) : null}
+          {/* Logo */}
+          <Link href="/" className="flex shrink-0 items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#4f7ef5]/30 bg-[#1d2b4a]">
+              <svg
+                className="h-5 w-5 text-[#a5c0f8]"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
+                />
+              </svg>
+            </div>
+            <div>
+              <div className="text-[1.1rem] font-semibold leading-none tracking-tight text-[#f0f0f0]">
+                DACS
               </div>
-
-              <div className="flex items-center gap-2 overflow-x-auto pb-1">
-                <span className="hidden shrink-0 text-[11px] uppercase tracking-[0.28em] text-[#77879e] sm:inline-flex">
-                  Navigate
-                </span>
-              {navLinks.map((link) => {
-                const isActive =
-                  pathname === link.href ||
-                  (link.href !== "/" && pathname.startsWith(link.href))
-
-                return (
-                  <Link
-                    key={link.href}
-                    href={link.href}
-                    className={`relative shrink-0 rounded-full px-4 py-2.5 text-sm font-medium transition-all duration-200 ${
-                      isActive
-                        ? "bg-[#f3eadc] text-[#101828] shadow-[0_10px_30px_rgba(5,10,20,0.18)]"
-                        : "border border-transparent text-[#b4c0d1] hover:border-[#eedfce]/10 hover:bg-[#111b2d]/76 hover:text-[#f7efe3]"
-                    }`}
-                  >
-                    {link.label}
-                  </Link>
-                )
-              })}
+              <div className="mt-0.5 text-[10px] text-[#666666]">
+                Academic Trust Ledger
               </div>
             </div>
+          </Link>
 
-            <div className="flex flex-wrap items-center gap-3 xl:justify-end">
-              {primaryAction ? (
+          {/* Nav links */}
+          <div className="flex items-center gap-1 overflow-x-auto">
+            {navLinks.map((link) => {
+              const isActive =
+                pathname === link.href ||
+                (link.href !== "/" && pathname.startsWith(link.href))
+              return (
                 <Link
-                  href={primaryAction.href}
-                  className="brand-button-primary px-4 py-3 text-sm"
+                  key={link.href}
+                  href={link.href}
+                  className={`shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors duration-150 ${
+                    isActive
+                      ? "bg-[#1d2b4a] text-[#a5c0f8]"
+                      : "text-[#a0a0a0] hover:bg-white/[0.04] hover:text-[#f0f0f0]"
+                  }`}
                 >
-                  {primaryAction.label}
+                  {link.label}
                 </Link>
-              ) : null}
+              )
+            })}
+          </div>
 
-              {isAuthenticated ? (
-                <button
-                  onClick={onLogout}
-                  className="brand-button-secondary px-4 py-3 text-sm"
-                >
-                  Logout
-                </button>
+          {/* Status badges */}
+          <div className="flex flex-1 flex-wrap items-center justify-end gap-2">
+            <div
+              className={`rounded-full border px-2.5 py-1 text-[10px] font-medium ${sessionTone}`}
+            >
+              {sessionLabel}
+            </div>
+            <div
+              className={`rounded-full border px-2.5 py-1 text-[10px] font-medium ${networkTone}`}
+            >
+              {networkLabel}
+            </div>
+            <div
+              className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-medium ${
+                isChainLive
+                  ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-300"
+                  : "border-white/[0.08] bg-transparent text-[#666666]"
+              }`}
+            >
+              {isChainLive ? (
+                <>
+                  <span className="brand-status-dot" />
+                  {blockNumber != null
+                    ? `Block ${blockNumber.toLocaleString()}`
+                    : "Live"}
+                </>
               ) : (
-                <button
-                  onClick={onConnectWallet}
-                  disabled={isBusy}
-                  className="brand-button-primary px-4 py-3 text-sm disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {walletActionLabel}
-                </button>
+                "Chain —"
               )}
             </div>
-          </div>
-          <div className="brand-divider" />
+            {user?.role ? <RoleBadge role={user.role} /> : null}
+            {walletAddress ? (
+              <WalletBadge
+                address={walletAddress}
+                label={isAuthenticated ? "Verified Wallet" : "Connected Wallet"}
+              />
+            ) : null}
 
-          {warningMessage || walletNote ? (
-            <div className="px-5 py-4">
-              <div className="space-y-3">
-                {warningMessage ? (
-                  <StatusBanner
-                    compact
-                    tone="warning"
-                    title="Wallet Attention"
-                    message={warningMessage}
-                  />
-                ) : null}
-                {walletNote ? (
-                  <StatusBanner
-                    compact
-                    tone="neutral"
-                    title="Session Note"
-                    message={walletNote}
-                  />
-                ) : null}
-              </div>
-            </div>
-          ) : null}
+            {/* Actions */}
+            {primaryAction ? (
+              <Link
+                href={primaryAction.href}
+                className="brand-button-primary px-3 py-1.5 text-sm"
+              >
+                {primaryAction.label}
+              </Link>
+            ) : null}
+            {isAuthenticated ? (
+              <button
+                onClick={onLogout}
+                className="brand-button-secondary px-3 py-1.5 text-sm"
+              >
+                Logout
+              </button>
+            ) : (
+              <button
+                onClick={onConnectWallet}
+                disabled={isBusy}
+                className="brand-button-primary px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {walletActionLabel}
+              </button>
+            )}
+          </div>
         </div>
+
+        {warningMessage || walletNote ? (
+          <div className="border-t border-white/[0.06] px-5 py-3">
+            <div className="space-y-2">
+              {warningMessage ? (
+                <StatusBanner
+                  compact
+                  tone="warning"
+                  title="Wallet Attention"
+                  message={warningMessage}
+                />
+              ) : null}
+              {walletNote ? (
+                <StatusBanner
+                  compact
+                  tone="neutral"
+                  title="Session Note"
+                  message={walletNote}
+                />
+              ) : null}
+            </div>
+          </div>
+        ) : null}
       </div>
     </nav>
   )

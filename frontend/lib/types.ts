@@ -240,6 +240,19 @@ export interface PlatformHealth {
   }
 }
 
+export interface AiInsight {
+  institution: string | null
+  courseName: string | null
+  credentialType: string | null
+  grade: string | null
+  issueDate: string | null
+  durationOrCredits: string | null
+  confidence: "high" | "medium" | "low"
+  suggestedEduAmount: number
+  suggestionReason: string
+  rawSummary: string
+}
+
 export interface UploadSubmissionInput {
   certificate: File
   courseName: string
@@ -288,6 +301,18 @@ export interface FinalizeMintResult {
 
 export interface RevocationResult {
   submission: Submission
+}
+
+export interface SavedDisclosureRecord {
+  id: string
+  tokenId: string
+  claimsRoot: string
+  disclosedClaims: Record<string, unknown>
+  merkleProofs: Record<string, string[]>
+  audience: string | null
+  expiresAt: string | null
+  claimCount: number
+  createdAt: string
 }
 
 export interface DisclosurePackage {

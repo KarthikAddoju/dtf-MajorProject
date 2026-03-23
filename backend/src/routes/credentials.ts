@@ -13,8 +13,40 @@ import { assertInstituteReviewerAccess } from "../lib/reviewers";
 import { isOptionalString } from "../lib/validation";
 import { buildMerkleTree } from "../lib/merkle";
 import { toSubmissionResponse } from "../lib/submissionResponses";
+import { DisclosureRecordModel } from "../models/DisclosureRecord";
 
 const router = Router();
+
+// List all saved disclosure packages for the authenticated student
+router.get("/disclosures", authenticate, async (req: AuthRequest, res) => {
+  try {
+    if (!req.user) {
+      return sendError(res, 401, "UNAUTHORIZED", "You must be signed in");
+    }
+
+    const records = await DisclosureRecordModel.find({
+      studentAddress: req.user.address,
+    })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return sendSuccess(res, {
+      disclosures: records.map((r) => ({
+        id: (r._id as { toString(): string }).toString(),
+        tokenId: r.tokenId,
+        claimsRoot: r.claimsRoot,
+        disclosedClaims: r.disclosedClaims,
+        merkleProofs: r.merkleProofs,
+        audience: r.audience ?? null,
+        expiresAt: r.expiresAt ? (r.expiresAt as Date).toISOString() : null,
+        claimCount: r.claimCount,
+        createdAt: (r.createdAt as Date).toISOString(),
+      })),
+    });
+  } catch (error) {
+    return handleServerError(res, error, "Could not load disclosure packages");
+  }
+});
 
 router.post(
   "/:tokenId/revoke/finalize",
@@ -269,13 +301,27 @@ router.post(
         requestedKeys.map((key) => [key, merkleTree.proofs[key] ?? []])
       );
 
+      const resolvedExpiresAt = expiresAt ?? submission.expiresAt?.toISOString() ?? null;
+
+      // Persist disclosure package for later retrieval from the dashboard
+      await DisclosureRecordModel.create({
+        tokenId,
+        studentAddress: req.user.address,
+        claimsRoot: submission.claimsRoot,
+        disclosedClaims,
+        merkleProofs,
+        audience: typeof audience === "string" ? audience : null,
+        expiresAt: resolvedExpiresAt ? new Date(resolvedExpiresAt) : null,
+        claimCount: requestedKeys.length,
+      });
+
       return sendSuccess(res, {
         tokenId,
         claimsRoot: submission.claimsRoot,
         disclosedClaims,
         merkleProofs,
         audience: audience ?? null,
-        expiresAt: expiresAt ?? submission.expiresAt?.toISOString() ?? null,
+        expiresAt: resolvedExpiresAt,
       });
     } catch (error) {
       return handleServerError(res, error, "Could not create disclosure package");

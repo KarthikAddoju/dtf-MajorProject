@@ -2,6 +2,7 @@
 
 import { AuthProvider, useAuth } from "@/components/AuthProvider"
 import { Navbar } from "@/components/Navbar"
+import { useBlockNumber } from "@/hooks/use-block-number"
 
 function ClientShell({
   children,
@@ -23,6 +24,8 @@ function ClientShell({
     walletWarning,
   } = useAuth()
 
+  const { blockNumber, isLive: isChainLive } = useBlockNumber()
+
   return (
     <>
       <Navbar
@@ -38,6 +41,8 @@ function ClientShell({
         walletWarning={walletWarning}
         onConnectWallet={connectAndSignIn}
         onLogout={logout}
+        blockNumber={blockNumber}
+        isChainLive={isChainLive}
       />
 
       {children}

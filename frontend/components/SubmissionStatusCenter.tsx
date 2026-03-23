@@ -9,6 +9,7 @@ import type { Submission } from "@/lib/types"
 
 interface SubmissionStatusCenterProps {
   submissions: Submission[]
+  staleTokenIds?: ReadonlySet<string>
   title?: string
   emptyTitle?: string
   emptyDescription?: string
@@ -19,29 +20,30 @@ function getToneClasses(tone: "minted" | "pending" | "rejected") {
     case "minted":
       return {
         badge:
-          "border border-[#0f766e]/30 bg-[#0f766e]/12 text-[#c9f0e7]",
+          "border border-emerald-500/25 bg-emerald-500/10 text-emerald-300",
         card:
-          "border-[#0f766e]/18 bg-[#0f766e]/10",
+          "border-emerald-500/15 bg-emerald-500/06",
       }
     case "rejected":
       return {
         badge:
-          "border border-rose-500/30 bg-rose-500/10 text-rose-200",
+          "border border-rose-500/25 bg-rose-500/10 text-rose-300",
         card:
-          "border-rose-500/18 bg-rose-500/10",
+          "border-rose-500/15 bg-rose-500/06",
       }
     default:
       return {
         badge:
-          "border border-[#b8892d]/30 bg-[#b8892d]/12 text-[#f3d9a2]",
+          "border border-amber-500/25 bg-amber-500/10 text-amber-200",
         card:
-          "border-[#b8892d]/18 bg-[#b8892d]/10",
+          "border-amber-500/15 bg-amber-500/06",
       }
   }
 }
 
 export function SubmissionStatusCenter({
   submissions,
+  staleTokenIds,
   title = "Student Status Center",
   emptyTitle = "No status updates yet",
   emptyDescription = "Once you submit a credential, review and mint updates will appear here with the next recommended action.",
@@ -68,66 +70,82 @@ export function SubmissionStatusCenter({
       ) : (
         <div className="space-y-5">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <div className="rounded-2xl border border-[#0f766e]/18 bg-[#0f766e]/10 p-4">
-              <div className="text-xs uppercase tracking-[0.2em] text-[#9fd8ce]">
+            <div className="rounded-xl border border-emerald-500/15 bg-emerald-500/06 p-4">
+              <div className="text-xs text-[#666666]">
                 Minted
               </div>
-              <div className="mt-2 text-2xl font-semibold text-white">{mintedCount}</div>
+              <div className="mt-2 text-2xl font-semibold text-[#f0f0f0]">{mintedCount}</div>
             </div>
-            <div className="rounded-2xl border border-[#b8892d]/18 bg-[#b8892d]/10 p-4">
-              <div className="text-xs uppercase tracking-[0.2em] text-[#f3d9a2]">
+            <div className="rounded-xl border border-amber-500/15 bg-amber-500/06 p-4">
+              <div className="text-xs text-[#666666]">
                 In Review
               </div>
-              <div className="mt-2 text-2xl font-semibold text-white">{pendingCount}</div>
+              <div className="mt-2 text-2xl font-semibold text-[#f0f0f0]">{pendingCount}</div>
             </div>
-            <div className="rounded-2xl border border-rose-500/18 bg-rose-500/10 p-4">
-              <div className="text-xs uppercase tracking-[0.2em] text-rose-200">
+            <div className="rounded-xl border border-rose-500/15 bg-rose-500/06 p-4">
+              <div className="text-xs text-[#666666]">
                 Needs Attention
               </div>
-              <div className="mt-2 text-2xl font-semibold text-white">{attentionCount}</div>
+              <div className="mt-2 text-2xl font-semibold text-[#f0f0f0]">{attentionCount}</div>
             </div>
           </div>
 
           <div className="space-y-3">
             {notifications.slice(0, 4).map((notification) => {
-              const tone = getToneClasses(notification.tone)
+              const isStale =
+                notification.tone === "minted" &&
+                notification.tokenId != null &&
+                (staleTokenIds?.has(notification.tokenId) ?? false)
+              const tone = isStale
+                ? getToneClasses("pending")
+                : getToneClasses(notification.tone)
 
               return (
                 <div
                   key={notification.id}
-                  className={`rounded-2xl border p-4 ${tone.card}`}
+                  className={`rounded-xl border p-4 ${tone.card}`}
                 >
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="max-w-2xl">
                       <div
-                        className={`inline-flex rounded-full px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] ${tone.badge}`}
+                        className={`inline-flex rounded-full px-3 py-1 text-[11px] font-medium ${tone.badge}`}
                       >
-                        {notification.tone === "minted"
-                          ? "Ready"
-                          : notification.tone === "rejected"
-                            ? "Action Needed"
-                            : "In Review"}
+                        {isStale
+                          ? "Chain Stale"
+                          : notification.tone === "minted"
+                            ? "Ready"
+                            : notification.tone === "rejected"
+                              ? "Action Needed"
+                              : "In Review"}
                       </div>
-                      <h3 className="mt-3 text-lg font-semibold text-white">
+                      <h3 className="mt-3 text-lg font-semibold text-[#f0f0f0]">
                         {notification.title}
                       </h3>
-                      <p className="mt-2 text-sm leading-6 text-slate-300">
-                        {notification.message}
+                      <p className="mt-2 text-sm leading-6 text-[#a0a0a0]">
+                        {isStale
+                          ? `Token #${notification.tokenId} is not present on the current chain. The local Hardhat network may have been restarted since this credential was minted.`
+                          : notification.message}
                       </p>
                     </div>
 
-                    <div className="text-sm text-slate-400">
+                    <div className="text-sm text-[#666666]">
                       {formatDateTime(notification.timestamp)}
                     </div>
                   </div>
 
                   <div className="mt-4">
-                    <Link
-                      href={notification.href}
-                      className="inline-flex rounded-full border border-white/10 bg-black/20 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10"
-                    >
-                      {notification.ctaLabel}
-                    </Link>
+                    {isStale ? (
+                      <span className="inline-flex cursor-not-allowed rounded-full border border-white/[0.06] bg-white/[0.02] px-4 py-2 text-sm font-medium text-[#666666]">
+                        Token Unavailable
+                      </span>
+                    ) : (
+                      <Link
+                        href={notification.href}
+                        className="inline-flex rounded-full border border-white/[0.10] bg-white/[0.04] px-4 py-2 text-sm font-medium text-[#f0f0f0] transition hover:bg-white/[0.08]"
+                      >
+                        {notification.ctaLabel}
+                      </Link>
+                    )}
                   </div>
                 </div>
               )

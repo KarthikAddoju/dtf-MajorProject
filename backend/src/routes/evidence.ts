@@ -6,6 +6,7 @@ import { InstituteModel } from "../models/Institute";
 import { isValidObjectId } from "../lib/validation";
 import { instituteHasVerifierAddress } from "../lib/reviewers";
 import { readEncryptedEvidence } from "../services/evidenceVault";
+import { analyseCertificate } from "../services/geminiAnalyser";
 
 const router = Router();
 
@@ -70,6 +71,48 @@ router.get("/:submissionId", authenticate, async (req: AuthRequest, res) => {
     return res.send(evidenceBuffer);
   } catch (error) {
     return handleServerError(res, error, "Could not load evidence");
+  }
+});
+
+router.post("/:submissionId/analyse", authenticate, async (req: AuthRequest, res) => {
+  try {
+    if (!req.user) {
+      return sendError(res, 401, "UNAUTHORIZED", "You must be signed in");
+    }
+
+    if (req.user.role !== "admin") {
+      return sendError(res, 403, "FORBIDDEN", "Admin access required");
+    }
+
+    const submissionId = String(req.params.submissionId);
+
+    if (!isValidObjectId(submissionId)) {
+      return sendError(res, 400, "VALIDATION_ERROR", "Invalid submission id");
+    }
+
+    const submission = await CertificateSubmissionModel.findById(submissionId)
+      .select("status privateEvidenceRef mimeType")
+      .lean();
+
+    if (!submission) {
+      return sendError(res, 404, "SUBMISSION_NOT_FOUND", "Submission not found");
+    }
+
+    if (submission.status !== "pending_review") {
+      return sendError(
+        res,
+        400,
+        "INVALID_STATUS",
+        "Only pending submissions can be analysed"
+      );
+    }
+
+    const evidenceBuffer = await readEncryptedEvidence(submission.privateEvidenceRef);
+    const insight = await analyseCertificate(evidenceBuffer, submission.mimeType);
+
+    return res.json(insight);
+  } catch (error) {
+    return handleServerError(res, error, "Could not analyse evidence");
   }
 });
 

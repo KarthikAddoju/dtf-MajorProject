@@ -14,6 +14,7 @@ import {
 import { EmptyStatePanel } from "@/components/EmptyStatePanel"
 import { MetricCard } from "@/components/MetricCard"
 import { PageLayout } from "@/components/PageLayout"
+import { SkeletonBlock } from "@/components/SkeletonBlock"
 import { StatusBanner } from "@/components/StatusBanner"
 import {
   fetchAnalyticsOverview,
@@ -137,40 +138,40 @@ export default function CollegesPage() {
       <section className="mb-10 grid gap-8 xl:grid-cols-[1.08fr_0.92fr] xl:items-start">
         <div className="brand-panel-light px-8 py-9 sm:px-10">
           <div className="brand-kicker">Institute Index</div>
-          <div className="mt-6 text-[11px] uppercase tracking-[0.34em] text-[#4f5966]">
+          <div className="mt-6 text-[11px] uppercase tracking-[0.34em] text-[#666666]">
             Public / rankings / network momentum
           </div>
-          <h1 className="display-serif mt-4 max-w-4xl text-5xl font-semibold leading-[0.95] text-[#101828] sm:text-6xl">
+          <h1 className="mt-4 max-w-4xl text-5xl font-semibold leading-[0.95] text-[#f0f0f0] sm:text-6xl">
             Rank institutes by real credential issuance, not brochure claims.
           </h1>
-          <p className="mt-5 max-w-2xl text-lg leading-8 text-[#243246]">
+          <p className="mt-5 max-w-2xl text-lg leading-8 text-[#a0a0a0]">
             The college index translates on-chain EDU rewards and minted credential
             activity into a public trust scoreboard for institutes, students, and
             external verifiers.
           </p>
 
           <div className="mt-8 grid gap-4 sm:grid-cols-3">
-            <div className="rounded-[24px_12px_24px_12px] border border-[#101828]/12 bg-[rgba(255,255,255,0.82)] p-5">
-              <div className="text-[11px] uppercase tracking-[0.26em] text-[#4d596d]">
+            <div className="rounded-xl border border-white/[0.08] bg-[#2a2a2a] p-5">
+              <div className="text-[11px] uppercase tracking-[0.26em] text-[#666666]">
                 Active Institutes
               </div>
-              <div className="display-serif mt-3 text-[2rem] text-[#101828]">
+              <div className="mt-3 text-[2rem] text-[#f0f0f0]">
                 {colleges.length}
               </div>
             </div>
-            <div className="rounded-[24px_12px_24px_12px] border border-[#101828]/12 bg-[rgba(255,255,255,0.82)] p-5">
-              <div className="text-[11px] uppercase tracking-[0.26em] text-[#4d596d]">
+            <div className="rounded-xl border border-white/[0.08] bg-[#2a2a2a] p-5">
+              <div className="text-[11px] uppercase tracking-[0.26em] text-[#666666]">
                 Verified Students
               </div>
-              <div className="display-serif mt-3 text-[2rem] text-[#101828]">
+              <div className="mt-3 text-[2rem] text-[#f0f0f0]">
                 {totals.totalStudents.toLocaleString()}
               </div>
             </div>
-            <div className="rounded-[24px_12px_24px_12px] border border-[#101828]/12 bg-[rgba(255,255,255,0.82)] p-5">
-              <div className="text-[11px] uppercase tracking-[0.26em] text-[#4d596d]">
+            <div className="rounded-xl border border-white/[0.08] bg-[#2a2a2a] p-5">
+              <div className="text-[11px] uppercase tracking-[0.26em] text-[#666666]">
                 Live Search
               </div>
-              <div className="display-serif mt-3 text-[2rem] text-[#101828]">
+              <div className="mt-3 text-[2rem] text-[#f0f0f0]">
                 {filteredColleges.length}
               </div>
             </div>
@@ -178,10 +179,10 @@ export default function CollegesPage() {
         </div>
 
         <div className="brand-panel p-7">
-          <div className="text-[11px] uppercase tracking-[0.3em] text-[#8bbbd5]">
+          <div className="text-[11px] uppercase tracking-[0.3em] text-[#4f7ef5]">
             Leaderboard Logic
           </div>
-          <h2 className="display-serif mt-2 text-[2.1rem] font-semibold text-[#f7efe3]">
+          <h2 className="mt-2 text-[2.1rem] font-semibold text-[#f0f0f0]">
             EDU totals, credential volume, and student reach.
           </h2>
           <div className="mt-6 space-y-3">
@@ -192,12 +193,12 @@ export default function CollegesPage() {
             ].map((item, index) => (
               <div
                 key={item}
-                className="grid gap-3 rounded-[22px_12px_22px_12px] border border-[#eedfce]/10 bg-[rgba(255,255,255,0.03)] p-4 sm:grid-cols-[40px_1fr]"
+                className="grid gap-3 rounded-xl border border-white/[0.06] bg-[rgba(255,255,255,0.03)] p-4 sm:grid-cols-[40px_1fr]"
               >
-                <div className="flex h-10 w-10 items-center justify-center rounded-[15px] bg-[#f2e7d7] text-sm font-semibold text-[#101828]">
+                <div className="flex h-10 w-10 items-center justify-center rounded-[15px] bg-[#1d2b4a] text-sm font-semibold text-[#f0f0f0]">
                   {index + 1}
                 </div>
-                <p className="self-center text-[#d8e0ec]">{item}</p>
+                <p className="self-center text-[#a0a0a0]">{item}</p>
               </div>
             ))}
           </div>
@@ -207,12 +208,12 @@ export default function CollegesPage() {
       <div className="mb-10 grid grid-cols-1 gap-6 sm:grid-cols-3">
         <MetricCard
           title="Total EDU Minted"
-          value={<span className="text-[#ffe2af]">{totals.totalEduMinted.toLocaleString()} EDU</span>}
+          value={<span className="text-[#4f7ef5]">{totals.totalEduMinted.toLocaleString()} EDU</span>}
           accentColor="yellow"
         />
         <MetricCard
           title="Certificates Minted"
-          value={<span className="text-[#d5e7f1]">{totals.totalCertificates.toLocaleString()}</span>}
+          value={<span className="text-[#a5c0f8]">{totals.totalCertificates.toLocaleString()}</span>}
           accentColor="blue"
         />
         <MetricCard
@@ -227,7 +228,7 @@ export default function CollegesPage() {
           <div>
             <label
               htmlFor="collegeSearch"
-              className="mb-2 block text-sm font-medium text-[#c8d0de]"
+              className="mb-2 block text-sm font-medium text-[#a0a0a0]"
             >
               Search Institutes
             </label>
@@ -237,17 +238,17 @@ export default function CollegesPage() {
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
               placeholder="Search by institute name or slug"
-              className="w-full rounded-[20px] border border-[#eedfce]/12 bg-[rgba(255,255,255,0.04)] px-4 py-3 text-[#f7efe3] placeholder:text-[#8ea0b8] focus:border-[#d25b36]/40 focus:outline-none"
+              className="w-full rounded-[20px] border border-white/[0.08] bg-[rgba(255,255,255,0.04)] px-4 py-3 text-[#f0f0f0] placeholder:text-[#a0a0a0] focus:border-[#4f7ef5]/50 focus:outline-none"
             />
             <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-              <p className="text-xs text-[#8ea0b8]">
+              <p className="text-xs text-[#a0a0a0]">
                 Search updates live across institute names and public slugs.
               </p>
               {searchQuery.trim() ? (
                 <button
                   type="button"
                   onClick={() => setSearchQuery("")}
-                  className="rounded-full border border-[#eedfce]/12 bg-[rgba(255,255,255,0.05)] px-3 py-1.5 text-xs font-medium uppercase tracking-[0.16em] text-[#f7efe3] transition hover:bg-[rgba(255,255,255,0.1)]"
+                  className="rounded-full border border-white/[0.08] bg-[rgba(255,255,255,0.05)] px-3 py-1.5 text-xs font-medium uppercase tracking-[0.16em] text-[#f0f0f0] transition hover:bg-[rgba(255,255,255,0.1)]"
                 >
                   Clear Search
                 </button>
@@ -255,7 +256,7 @@ export default function CollegesPage() {
             </div>
           </div>
           <div className="flex flex-col justify-end">
-            <div className="rounded-[20px] border border-[#eedfce]/10 bg-[rgba(255,255,255,0.03)] px-4 py-3 text-sm text-[#c8d0de]">
+            <div className="rounded-[20px] border border-white/[0.06] bg-[rgba(255,255,255,0.03)] px-4 py-3 text-sm text-[#a0a0a0]">
               Showing {filteredColleges.length} of {colleges.length} institutes
             </div>
           </div>
@@ -265,36 +266,36 @@ export default function CollegesPage() {
       {!isLoading && !errorMessage ? (
         <div className="mb-8 grid gap-6 xl:grid-cols-[1.05fr_0.95fr] xl:items-start">
           <div className="brand-panel p-7">
-            <div className="text-[11px] uppercase tracking-[0.3em] text-[#8bbbd5]">
+            <div className="text-[11px] uppercase tracking-[0.3em] text-[#4f7ef5]">
               Leaderboard Insight
             </div>
-            <h2 className="display-serif mt-2 text-[2.1rem] font-semibold text-[#f7efe3]">
+            <h2 className="mt-2 text-[2.1rem] font-semibold text-[#f0f0f0]">
               One primary story from the network.
             </h2>
-            <p className="mt-4 max-w-3xl text-[#c8d0de]">{leaderboardInsight}</p>
+            <p className="mt-4 max-w-3xl text-[#a0a0a0]">{leaderboardInsight}</p>
 
             <div className="mt-6 grid gap-4 sm:grid-cols-3">
-              <div className="rounded-[22px_12px_22px_12px] border border-[#eedfce]/10 bg-[rgba(255,255,255,0.03)] p-4">
-                <div className="text-[11px] uppercase tracking-[0.24em] text-[#8ea0b8]">
+              <div className="rounded-xl border border-white/[0.06] bg-[rgba(255,255,255,0.03)] p-4">
+                <div className="text-[11px] uppercase tracking-[0.24em] text-[#a0a0a0]">
                   Average EDU / institute
                 </div>
-                <div className="display-serif mt-2 text-[2rem] text-[#f7efe3]">
+                <div className="mt-2 text-[2rem] text-[#f0f0f0]">
                   {chartAverage.toLocaleString()}
                 </div>
               </div>
-              <div className="rounded-[22px_12px_22px_12px] border border-[#eedfce]/10 bg-[rgba(255,255,255,0.03)] p-4">
-                <div className="text-[11px] uppercase tracking-[0.24em] text-[#8ea0b8]">
+              <div className="rounded-xl border border-white/[0.06] bg-[rgba(255,255,255,0.03)] p-4">
+                <div className="text-[11px] uppercase tracking-[0.24em] text-[#a0a0a0]">
                   Search coverage
                 </div>
-                <div className="display-serif mt-2 text-[2rem] text-[#f7efe3]">
+                <div className="mt-2 text-[2rem] text-[#f0f0f0]">
                   {filteredColleges.length}/{colleges.length}
                 </div>
               </div>
-              <div className="rounded-[22px_12px_22px_12px] border border-[#eedfce]/10 bg-[rgba(255,255,255,0.03)] p-4">
-                <div className="text-[11px] uppercase tracking-[0.24em] text-[#8ea0b8]">
+              <div className="rounded-xl border border-white/[0.06] bg-[rgba(255,255,255,0.03)] p-4">
+                <div className="text-[11px] uppercase tracking-[0.24em] text-[#a0a0a0]">
                   Leader share
                 </div>
-                <div className="display-serif mt-2 text-[2rem] text-[#f7efe3]">
+                <div className="mt-2 text-[2rem] text-[#f0f0f0]">
                   {leadingShare !== null ? `${leadingShare}%` : "Pending"}
                 </div>
               </div>
@@ -312,40 +313,40 @@ export default function CollegesPage() {
       {featuredCollege ? (
         <div className="mb-8 grid gap-8 xl:grid-cols-[1.02fr_0.98fr] xl:items-start">
           <div className="brand-panel-light px-8 py-8">
-            <div className="text-[11px] uppercase tracking-[0.3em] text-[#6f563f]">
+            <div className="text-[11px] uppercase tracking-[0.3em] text-[#666666]">
               Featured Institute
             </div>
-            <h2 className="display-serif mt-2 text-[3rem] font-semibold leading-[0.95] text-[#101828]">
+            <h2 className="mt-2 text-[3rem] font-semibold leading-[0.95] text-[#f0f0f0]">
               {featuredCollege.instituteName}
             </h2>
-            <p className="mt-4 max-w-2xl text-[#243246]">
+            <p className="mt-4 max-w-2xl text-[#a0a0a0]">
               Ranked #{featuredCollege.rank} with{" "}
               {featuredCollege.totalEduMinted.toLocaleString()} EDU minted across{" "}
               {featuredCollege.mintedCertificates} verified credentials.
             </p>
 
             <div className="mt-8 grid gap-4 sm:grid-cols-3">
-              <div className="rounded-[22px_12px_22px_12px] border border-[#101828]/12 bg-[rgba(255,255,255,0.82)] p-4">
-                <div className="text-[11px] uppercase tracking-[0.24em] text-[#4d596d]">
+              <div className="rounded-xl border border-white/[0.08] bg-[#2a2a2a] p-4">
+                <div className="text-[11px] uppercase tracking-[0.24em] text-[#666666]">
                   Rank
                 </div>
-                <div className="display-serif mt-2 text-[2rem] text-[#101828]">
+                <div className="mt-2 text-[2rem] text-[#f0f0f0]">
                   #{featuredCollege.rank}
                 </div>
               </div>
-              <div className="rounded-[22px_12px_22px_12px] border border-[#101828]/12 bg-[rgba(255,255,255,0.82)] p-4">
-                <div className="text-[11px] uppercase tracking-[0.24em] text-[#4d596d]">
+              <div className="rounded-xl border border-white/[0.08] bg-[#2a2a2a] p-4">
+                <div className="text-[11px] uppercase tracking-[0.24em] text-[#666666]">
                   EDU Minted
                 </div>
-                <div className="display-serif mt-2 text-[2rem] text-[#101828]">
+                <div className="mt-2 text-[2rem] text-[#f0f0f0]">
                   {featuredCollege.totalEduMinted.toLocaleString()}
                 </div>
               </div>
-              <div className="rounded-[22px_12px_22px_12px] border border-[#101828]/12 bg-[rgba(255,255,255,0.82)] p-4">
-                <div className="text-[11px] uppercase tracking-[0.24em] text-[#4d596d]">
+              <div className="rounded-xl border border-white/[0.08] bg-[#2a2a2a] p-4">
+                <div className="text-[11px] uppercase tracking-[0.24em] text-[#666666]">
                   Last Minted
                 </div>
-                <div className="mt-2 text-sm font-semibold text-[#101828]">
+                <div className="mt-2 text-sm font-semibold text-[#f0f0f0]">
                   {formatDateTime(featuredCollege.lastMintedAt)}
                 </div>
               </div>
@@ -355,7 +356,7 @@ export default function CollegesPage() {
               <div className="mt-6">
                 <Link
                   href={`/colleges/${featuredCollege.slug}`}
-                  className="inline-flex rounded-full bg-[#101828] px-5 py-3 text-sm font-semibold text-[#f7efe3] transition hover:bg-[#172136]"
+                  className="inline-flex rounded-full bg-[#1a1a1a] px-5 py-3 text-sm font-semibold text-[#f0f0f0] transition hover:bg-[#172136]"
                 >
                   Open Institute Profile
                 </Link>
@@ -364,42 +365,42 @@ export default function CollegesPage() {
           </div>
 
           <div className="brand-panel p-7">
-            <div className="text-[11px] uppercase tracking-[0.3em] text-[#f5c88a]">
+            <div className="text-[11px] uppercase tracking-[0.3em] text-[#a0a0a0]">
               Ranking Snapshot
             </div>
-            <h2 className="display-serif mt-2 text-[2.1rem] font-semibold text-[#f7efe3]">
+            <h2 className="mt-2 text-[2.1rem] font-semibold text-[#f0f0f0]">
               Public momentum, captured in one glance.
             </h2>
             <div className="mt-6 grid gap-4 sm:grid-cols-2">
-              <div className="rounded-[22px_12px_22px_12px] border border-[#eedfce]/10 bg-[rgba(255,255,255,0.03)] p-4">
-                <div className="text-[11px] uppercase tracking-[0.24em] text-[#8ea0b8]">
+              <div className="rounded-xl border border-white/[0.06] bg-[rgba(255,255,255,0.03)] p-4">
+                <div className="text-[11px] uppercase tracking-[0.24em] text-[#a0a0a0]">
                   Leading Share
                 </div>
-                <div className="display-serif mt-2 text-[2.2rem] text-[#f7efe3]">
+                <div className="mt-2 text-[2.2rem] text-[#f0f0f0]">
                   {leadingShare !== null ? `${leadingShare}%` : "Pending"}
                 </div>
               </div>
-              <div className="rounded-[22px_12px_22px_12px] border border-[#eedfce]/10 bg-[rgba(255,255,255,0.03)] p-4">
-                <div className="text-[11px] uppercase tracking-[0.24em] text-[#8ea0b8]">
+              <div className="rounded-xl border border-white/[0.06] bg-[rgba(255,255,255,0.03)] p-4">
+                <div className="text-[11px] uppercase tracking-[0.24em] text-[#a0a0a0]">
                   Recent Leader
                 </div>
-                <div className="mt-2 text-sm font-semibold text-[#f7efe3]">
+                <div className="mt-2 text-sm font-semibold text-[#f0f0f0]">
                   {overview?.leadInstituteName ?? "No live leader yet"}
                 </div>
               </div>
-              <div className="rounded-[22px_12px_22px_12px] border border-[#eedfce]/10 bg-[rgba(255,255,255,0.03)] p-4">
-                <div className="text-[11px] uppercase tracking-[0.24em] text-[#8ea0b8]">
+              <div className="rounded-xl border border-white/[0.06] bg-[rgba(255,255,255,0.03)] p-4">
+                <div className="text-[11px] uppercase tracking-[0.24em] text-[#a0a0a0]">
                   Certificates
                 </div>
-                <div className="display-serif mt-2 text-[2.2rem] text-[#f7efe3]">
+                <div className="mt-2 text-[2.2rem] text-[#f0f0f0]">
                   {totals.totalCertificates.toLocaleString()}
                 </div>
               </div>
-              <div className="rounded-[22px_12px_22px_12px] border border-[#eedfce]/10 bg-[rgba(255,255,255,0.03)] p-4">
-                <div className="text-[11px] uppercase tracking-[0.24em] text-[#8ea0b8]">
+              <div className="rounded-xl border border-white/[0.06] bg-[rgba(255,255,255,0.03)] p-4">
+                <div className="text-[11px] uppercase tracking-[0.24em] text-[#a0a0a0]">
                   Students
                 </div>
-                <div className="display-serif mt-2 text-[2.2rem] text-[#f7efe3]">
+                <div className="mt-2 text-[2.2rem] text-[#f0f0f0]">
                   {totals.totalStudents.toLocaleString()}
                 </div>
               </div>
@@ -411,10 +412,10 @@ export default function CollegesPage() {
       {overview ? (
         <div className="mb-8 grid grid-cols-1 gap-8 xl:grid-cols-[0.95fr_1.05fr] xl:items-start">
           <div className="brand-panel p-7">
-            <div className="text-[11px] uppercase tracking-[0.3em] text-[#8bbbd5]">
+            <div className="text-[11px] uppercase tracking-[0.3em] text-[#4f7ef5]">
               Network Momentum
             </div>
-            <h2 className="display-serif mt-2 text-[2.1rem] font-semibold text-[#f7efe3]">
+            <h2 className="mt-2 text-[2.1rem] font-semibold text-[#f0f0f0]">
               EDU minting performance
             </h2>
 
@@ -424,13 +425,13 @@ export default function CollegesPage() {
                   <CartesianGrid stroke="rgba(255, 255, 255, 0.08)" vertical={false} />
                   <XAxis
                     dataKey="name"
-                    stroke="#9db0c8"
+                    stroke="#666666"
                     tickLine={false}
                     axisLine={false}
                     fontSize={12}
                   />
                   <YAxis
-                    stroke="#9db0c8"
+                    stroke="#666666"
                     tickLine={false}
                     axisLine={false}
                     fontSize={12}
@@ -438,10 +439,10 @@ export default function CollegesPage() {
                   <Tooltip
                     cursor={{ fill: "rgba(255,255,255,0.04)" }}
                     contentStyle={{
-                      background: "#0f1726",
-                      border: "1px solid rgba(237,223,206,0.12)",
+                      background: "#1a1a1a",
+                      border: "1px solid rgba(255,255,255,0.08)",
                       borderRadius: "18px",
-                      color: "#f7efe3",
+                      color: "#f0f0f0",
                     }}
                   />
                   <Bar
@@ -451,8 +452,8 @@ export default function CollegesPage() {
                   />
                   <defs>
                     <linearGradient id="eduGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#d25b36" stopOpacity={0.95} />
-                      <stop offset="100%" stopColor="#8bbbd5" stopOpacity={0.9} />
+                      <stop offset="0%" stopColor="#4f7ef5" stopOpacity={0.95} />
+                      <stop offset="100%" stopColor="#6fa8f8" stopOpacity={0.9} />
                     </linearGradient>
                   </defs>
                 </BarChart>
@@ -460,19 +461,19 @@ export default function CollegesPage() {
             </div>
 
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              <div className="rounded-[22px_12px_22px_12px] border border-[#eedfce]/10 bg-[rgba(255,255,255,0.03)] p-4">
-                <div className="text-[11px] uppercase tracking-[0.22em] text-[#8ea0b8]">
+              <div className="rounded-xl border border-white/[0.06] bg-[rgba(255,255,255,0.03)] p-4">
+                <div className="text-[11px] uppercase tracking-[0.22em] text-[#a0a0a0]">
                   Chart reading
                 </div>
-                <p className="mt-2 text-sm leading-6 text-[#d8e0ec]">
+                <p className="mt-2 text-sm leading-6 text-[#a0a0a0]">
                   Bars compare EDU minted by the top visible institutes in the current search result.
                 </p>
               </div>
-              <div className="rounded-[22px_12px_22px_12px] border border-[#eedfce]/10 bg-[rgba(255,255,255,0.03)] p-4">
-                <div className="text-[11px] uppercase tracking-[0.22em] text-[#8ea0b8]">
+              <div className="rounded-xl border border-white/[0.06] bg-[rgba(255,255,255,0.03)] p-4">
+                <div className="text-[11px] uppercase tracking-[0.22em] text-[#a0a0a0]">
                   Visible slice
                 </div>
-                <p className="mt-2 text-sm leading-6 text-[#d8e0ec]">
+                <p className="mt-2 text-sm leading-6 text-[#a0a0a0]">
                   The chart shows up to six institutes at a time so labels stay readable and comparable.
                 </p>
               </div>
@@ -480,14 +481,14 @@ export default function CollegesPage() {
           </div>
 
           <div className="brand-panel-light px-8 py-7">
-            <div className="text-[11px] uppercase tracking-[0.3em] text-[#6f563f]">
+            <div className="text-[11px] uppercase tracking-[0.3em] text-[#666666]">
               Recent Verified Credentials
             </div>
-            <h2 className="display-serif mt-2 text-[2.1rem] font-semibold text-[#101828]">
+            <h2 className="mt-2 text-[2.1rem] font-semibold text-[#f0f0f0]">
               Fresh proof from the network
             </h2>
             {overview.recentActivity.length === 0 ? (
-              <div className="mt-6 rounded-[24px_12px_24px_12px] border border-[#101828]/12 bg-[rgba(255,255,255,0.82)] p-6 text-center text-[#243246]">
+              <div className="mt-6 rounded-xl border border-white/[0.08] bg-[#2a2a2a] p-6 text-center text-[#a0a0a0]">
                 The colleges index will show recent mint activity here once new
                 credentials are issued.
               </div>
@@ -496,26 +497,26 @@ export default function CollegesPage() {
                 {overview.recentActivity.slice(0, 4).map((activity) => (
                   <div
                     key={activity.id}
-                    className="rounded-[24px_12px_24px_12px] border border-[#101828]/12 bg-[rgba(255,255,255,0.82)] p-4"
+                    className="rounded-xl border border-white/[0.08] bg-[#2a2a2a] p-4"
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div className="min-w-0">
                         <div className="text-[11px] uppercase tracking-[0.26em] text-[#5f7f68]">
                           {activity.tokenId ? `Token #${activity.tokenId}` : "Minted Record"}
                         </div>
-                        <div className="mt-2 display-serif text-[1.55rem] font-semibold text-[#101828] [overflow-wrap:anywhere]">
+                        <div className="mt-2 text-[1.55rem] font-semibold text-[#f0f0f0] [overflow-wrap:anywhere]">
                           {activity.courseName}
                         </div>
                         <div className="mt-2 flex flex-wrap items-center gap-2">
-                          <div className="text-sm text-[#425168]">
+                          <div className="text-sm text-[#a0a0a0]">
                             {activity.instituteName}
                           </div>
-                          <div className="rounded-full border border-[#b8892d]/20 bg-[#b8892d]/10 px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-[#6f563f]">
+                          <div className="rounded-full border border-white/[0.10] bg-white/[0.04] px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-[#666666]">
                             {formatCredentialTypeLabel(activity.credentialType)}
                           </div>
                         </div>
                       </div>
-                      <div className="rounded-full border border-[#8bbbd5]/24 bg-[#8bbbd5]/12 px-3 py-1 text-xs font-medium text-[#345166]">
+                      <div className="rounded-full border border-[#4f7ef5]/20 bg-[#4f7ef5]/08 px-3 py-1 text-xs font-medium text-[#a5c0f8]">
                         {activity.eduAmount !== null
                           ? `${activity.eduAmount.toLocaleString()} EDU`
                           : "Reward pending"}
@@ -523,10 +524,10 @@ export default function CollegesPage() {
                     </div>
 
                     <div className="mt-3 flex items-center justify-between gap-3 text-sm">
-                      <span className="font-mono text-[#345166]">
+                      <span className="font-mono text-[#a0a0a0]">
                         {truncateValue(activity.studentAddress, 10, 8)}
                       </span>
-                      <span className="text-[#425168]">
+                      <span className="text-[#a0a0a0]">
                         {formatDateTime(activity.mintedAt)}
                       </span>
                     </div>
@@ -539,10 +540,15 @@ export default function CollegesPage() {
       ) : null}
 
       {isLoading ? (
-        <div className="brand-panel p-8">
-          <div className="py-12 text-center text-[#c8d0de]">
-            Building the college leaderboard...
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+            <SkeletonBlock variant="metric" />
+            <SkeletonBlock variant="metric" />
+            <SkeletonBlock variant="metric" />
           </div>
+          <SkeletonBlock variant="card" lines={3} />
+          <SkeletonBlock variant="card" lines={3} />
+          <SkeletonBlock variant="card" lines={3} />
         </div>
       ) : errorMessage ? (
         <div className="brand-panel p-8">
@@ -565,6 +571,11 @@ export default function CollegesPage() {
           <EmptyStatePanel
             title="No institutes match that search"
             description="Try a broader search term to explore the leaderboard again."
+            icon={
+              <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+              </svg>
+            }
             action={
               <button
                 type="button"
@@ -579,10 +590,10 @@ export default function CollegesPage() {
       ) : (
         <div className="brand-panel-light px-7 py-7 sm:px-8">
           <div className="mb-6 flex flex-col gap-2">
-            <div className="text-[11px] uppercase tracking-[0.3em] text-[#6f563f]">
+            <div className="text-[11px] uppercase tracking-[0.3em] text-[#666666]">
               Ranked Institutes
             </div>
-            <h2 className="display-serif text-[2.4rem] font-semibold text-[#101828]">
+            <h2 className="text-[2.4rem] font-semibold text-[#f0f0f0]">
               Public leaderboard
             </h2>
           </div>
@@ -590,51 +601,51 @@ export default function CollegesPage() {
             {filteredColleges.map((college) => (
               <div
                 key={`${college.slug ?? college.instituteName}-${college.rank}`}
-                className="grid gap-5 rounded-[28px_14px_28px_14px] border border-[#101828]/12 bg-[rgba(255,255,255,0.82)] p-5 shadow-[0_12px_30px_rgba(8,12,20,0.06)] lg:grid-cols-[88px_1.15fr_0.95fr_auto]"
+                className="grid gap-5 rounded-xl border border-white/[0.08] bg-[#2a2a2a] p-5 shadow-[0_12px_30px_rgba(8,12,20,0.06)] lg:grid-cols-[88px_1.15fr_0.95fr_auto]"
               >
-                <div className="flex flex-col justify-center rounded-[20px_10px_20px_10px] bg-[#101828] px-4 py-4 text-center text-[#f7efe3]">
-                  <div className="text-[11px] uppercase tracking-[0.26em] text-[#9db0c8]">
+                <div className="flex flex-col justify-center rounded-xl bg-[#1a1a1a] px-4 py-4 text-center text-[#f0f0f0]">
+                  <div className="text-[11px] uppercase tracking-[0.26em] text-[#a0a0a0]">
                     Rank
                   </div>
-                  <div className="display-serif mt-2 text-[2.2rem]">#{college.rank}</div>
+                  <div className="mt-2 text-[2.2rem]">#{college.rank}</div>
                 </div>
 
                 <div className="min-w-0">
-                  <h3 className="display-serif text-[2rem] font-semibold leading-none text-[#101828] [overflow-wrap:anywhere]">
+                  <h3 className="text-[2rem] font-semibold leading-none text-[#f0f0f0] [overflow-wrap:anywhere]">
                     {college.instituteName}
                   </h3>
-                  <p className="mt-2 text-sm text-[#425168]">
+                  <p className="mt-2 text-sm text-[#a0a0a0]">
                     {college.slug ?? "Institute slug unavailable"}
                   </p>
                   <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                     <div>
-                      <div className="text-[11px] uppercase tracking-[0.24em] text-[#4d596d]">
+                      <div className="text-[11px] uppercase tracking-[0.24em] text-[#666666]">
                         Certificates
                       </div>
-                      <div className="mt-2 text-lg font-semibold text-[#101828]">
+                      <div className="mt-2 text-lg font-semibold text-[#f0f0f0]">
                         {college.mintedCertificates}
                       </div>
                     </div>
                     <div>
-                      <div className="text-[11px] uppercase tracking-[0.24em] text-[#4d596d]">
+                      <div className="text-[11px] uppercase tracking-[0.24em] text-[#666666]">
                         Students
                       </div>
-                      <div className="mt-2 text-lg font-semibold text-[#101828]">
+                      <div className="mt-2 text-lg font-semibold text-[#f0f0f0]">
                         {college.uniqueStudents}
                       </div>
                     </div>
                     <div>
-                      <div className="text-[11px] uppercase tracking-[0.24em] text-[#4d596d]">
+                      <div className="text-[11px] uppercase tracking-[0.24em] text-[#666666]">
                         Last Mint
                       </div>
-                      <div className="mt-2 text-sm font-semibold text-[#101828]">
+                      <div className="mt-2 text-sm font-semibold text-[#f0f0f0]">
                         {formatDateTime(college.lastMintedAt)}
                       </div>
                     </div>
                   </div>
 
                   <div className="mt-4">
-                    <div className="mb-2 flex items-center justify-between text-[11px] uppercase tracking-[0.22em] text-[#4d596d]">
+                    <div className="mb-2 flex items-center justify-between text-[11px] uppercase tracking-[0.22em] text-[#666666]">
                       <span>Share of total EDU</span>
                       <span>
                         {totals.totalEduMinted > 0
@@ -646,7 +657,7 @@ export default function CollegesPage() {
                     </div>
                     <div className="h-2 overflow-hidden rounded-full bg-[#dfe6ef]">
                       <div
-                        className="h-full rounded-full bg-[linear-gradient(90deg,#d25b36,#8bbbd5)]"
+                        className="h-full rounded-full bg-[linear-gradient(90deg,#4f7ef5,#6fa8f8)]"
                         style={{
                           width: `${
                             totals.totalEduMinted > 0
@@ -664,14 +675,14 @@ export default function CollegesPage() {
                   </div>
                 </div>
 
-                <div className="flex flex-col justify-center rounded-[20px_10px_20px_10px] border border-[#101828]/10 bg-[rgba(255,255,255,0.55)] px-4 py-4 text-center">
-                  <div className="text-[11px] uppercase tracking-[0.24em] text-[#4d596d]">
+                <div className="flex flex-col justify-center rounded-xl border border-white/[0.06] bg-[#222222] px-4 py-4 text-center">
+                  <div className="text-[11px] uppercase tracking-[0.24em] text-[#666666]">
                     EDU Minted
                   </div>
-                  <div className="display-serif mt-2 text-[2.2rem] text-[#101828]">
+                  <div className="mt-2 text-[2.2rem] text-[#f0f0f0]">
                     {college.totalEduMinted.toLocaleString()}
                   </div>
-                  <div className="mt-3 text-sm text-[#425168]">
+                  <div className="mt-3 text-sm text-[#a0a0a0]">
                     {college.mintedCertificates > 0
                       ? `${Math.round(
                           college.totalEduMinted / college.mintedCertificates
@@ -684,7 +695,7 @@ export default function CollegesPage() {
                   {college.slug ? (
                     <Link
                       href={`/colleges/${college.slug}`}
-                      className="inline-flex rounded-full bg-[#101828] px-5 py-3 text-sm font-semibold text-[#f7efe3] transition hover:bg-[#172136]"
+                      className="inline-flex rounded-full bg-[#1a1a1a] px-5 py-3 text-sm font-semibold text-[#f0f0f0] transition hover:bg-[#172136]"
                     >
                       View Profile
                     </Link>

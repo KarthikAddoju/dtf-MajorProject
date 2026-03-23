@@ -4,14 +4,17 @@ import { ethers } from "ethers"
 import { type FormEvent, useEffect, useMemo, useState } from "react"
 import { AuditTrailList } from "@/components/AuditTrailList"
 import { DashboardCard } from "@/components/DashboardCard"
+import { DestructiveActionModal } from "@/components/DestructiveActionModal"
 import { EmptyStatePanel } from "@/components/EmptyStatePanel"
 import { MetricCard } from "@/components/MetricCard"
 import { PageLayout } from "@/components/PageLayout"
 import { RoleBadge } from "@/components/RoleBadge"
+import { SkeletonBlock } from "@/components/SkeletonBlock"
 import { StatusBanner } from "@/components/StatusBanner"
 import { WalletBadge } from "@/components/WalletBadge"
 import { useAuth } from "@/components/AuthProvider"
 import {
+  analyseEvidence,
   createInstitute,
   fetchAllSubmissions,
   fetchEvidenceBlob,
@@ -32,13 +35,19 @@ import {
   truncateValue,
 } from "@/lib/formatting"
 import { connectWallet } from "@/lib/wallet"
-import type { Institute, Submission } from "@/lib/types"
+import type { AiInsight, Institute, Submission } from "@/lib/types"
 
 interface ReviewDraft {
   eduAmount: string
   reviewNote: string
   expiresAt: string
 }
+
+type AiState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "error"; message: string }
+  | { status: "done"; insight: AiInsight }
 
 interface InstituteFieldErrors {
   name?: string
@@ -94,6 +103,89 @@ function toDateTimeLocalValue(value: string | null) {
     .slice(0, 16)
 }
 
+function AiInsightPanel({
+  insight,
+  onUseSuggestion,
+}: {
+  insight: AiInsight
+  onUseSuggestion: (amount: number) => void
+}) {
+  const confidenceTone =
+    insight.confidence === "high"
+      ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-300"
+      : insight.confidence === "medium"
+        ? "border-white/[0.10] bg-white/[0.04] text-amber-200"
+        : "border-rose-500/25 bg-rose-500/10 text-rose-300"
+
+  const rows: { label: string; value: string | null }[] = [
+    { label: "Institution", value: insight.institution },
+    { label: "Course", value: insight.courseName },
+    { label: "Type", value: insight.credentialType },
+    { label: "Grade", value: insight.grade },
+    { label: "Issued", value: insight.issueDate },
+    { label: "Duration / Credits", value: insight.durationOrCredits },
+  ]
+
+  return (
+    <div className="mt-4 rounded-xl border border-[#4f7ef5]/15 bg-[#161616] p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <svg className="h-4 w-4 text-[#4f7ef5]" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456Z" />
+          </svg>
+          <span className="text-xs font-semibold uppercase tracking-[0.22em] text-[#4f7ef5]">
+            AI Analysis
+          </span>
+        </div>
+        <div className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] ${confidenceTone}`}>
+          {insight.confidence} confidence
+        </div>
+      </div>
+
+      <div className="mb-3 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+        {rows.map(({ label, value }) =>
+          value ? (
+            <div key={label} className="flex gap-2 text-sm">
+              <span className="w-28 shrink-0 text-slate-500">{label}</span>
+              <span className="text-slate-200 [overflow-wrap:anywhere]">{value}</span>
+            </div>
+          ) : null
+        )}
+      </div>
+
+      {insight.rawSummary ? (
+        <p className="mb-3 text-xs italic text-slate-500 [overflow-wrap:anywhere]">
+          &ldquo;{insight.rawSummary}&rdquo;
+        </p>
+      ) : null}
+
+      <div className="border-t border-white/8 pt-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
+              Suggested EDU
+            </div>
+            <div className="mt-1 text-xl font-bold text-white">
+              {insight.suggestedEduAmount}{" "}
+              <span className="text-sm font-normal text-slate-400">tokens</span>
+            </div>
+            {insight.suggestionReason ? (
+              <p className="mt-1 text-xs text-slate-500">{insight.suggestionReason}</p>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            onClick={() => onUseSuggestion(insight.suggestedEduAmount)}
+            className="rounded-lg border border-[#4f7ef5]/25 bg-[#4f7ef5]/12 px-4 py-2.5 text-sm font-semibold text-[#a5c0f8] transition hover:bg-[#4f7ef5]/20"
+          >
+            Use suggestion ({insight.suggestedEduAmount} EDU)
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function AdminPage() {
   const {
     authFlowState,
@@ -116,6 +208,11 @@ export default function AdminPage() {
   const [processingSubmissionId, setProcessingSubmissionId] = useState<string | null>(
     null
   )
+  const [confirmModal, setConfirmModal] = useState<{
+    action: "reject" | "revoke"
+    submission: Submission
+  } | null>(null)
+  const [aiStates, setAiStates] = useState<Record<string, AiState>>({})
   const [togglingInstituteId, setTogglingInstituteId] = useState<string | null>(null)
   const [newInstituteName, setNewInstituteName] = useState("")
   const [newInstituteShortCode, setNewInstituteShortCode] = useState("")
@@ -354,13 +451,30 @@ export default function AdminPage() {
     }
   }
 
-  async function handleReject(submission: Submission) {
+  async function handleAnalyse(submission: Submission) {
+    if (!token) return
+    setAiStates((s) => ({ ...s, [submission.id]: { status: "loading" } }))
+    try {
+      const insight = await analyseEvidence(token, submission.id)
+      setAiStates((s) => ({ ...s, [submission.id]: { status: "done", insight } }))
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Analysis failed"
+      setAiStates((s) => ({ ...s, [submission.id]: { status: "error", message } }))
+    }
+  }
+
+  function handleReject(submission: Submission) {
+    setConfirmModal({ action: "reject", submission })
+  }
+
+  async function executeReject(submission: Submission) {
     if (!token) {
       return
     }
 
     const authToken = token
 
+    setConfirmModal(null)
     setProcessingSubmissionId(submission.id)
     setConsoleStatus({
       tone: "info",
@@ -396,31 +510,19 @@ export default function AdminPage() {
     }
   }
 
-  async function handleRevoke(submission: Submission) {
+  function handleRevoke(submission: Submission) {
+    if (!submission.tokenId) return
+    setConfirmModal({ action: "revoke", submission })
+  }
+
+  async function executeRevoke(submission: Submission, reason?: string) {
     if (!token || !user || !submission.tokenId) {
       return
     }
 
-    const reason = window.prompt(
-      `Enter a revocation reason for token #${submission.tokenId}:`,
-      submission.revocationReason ?? "Credential revoked"
-    )
+    const normalizedReason = (reason ?? "").trim() || "Credential revoked"
 
-    if (reason === null) {
-      return
-    }
-
-    const normalizedReason = reason.trim()
-
-    if (!normalizedReason) {
-      setConsoleStatus({
-        tone: "error",
-        title: "Revocation reason required",
-        message: "Enter a reason so the revocation can be hashed, recorded, and audited.",
-      })
-      return
-    }
-
+    setConfirmModal(null)
     setProcessingSubmissionId(submission.id)
     setConsoleStatus({
       tone: "info",
@@ -770,10 +872,10 @@ export default function AdminPage() {
           <div className="brand-chip mb-4">
             Reviewer Console
           </div>
-          <h1 className="display-serif mb-3 text-4xl font-semibold text-white sm:text-5xl">
+          <h1 className="mb-3 text-4xl font-semibold text-white sm:text-5xl">
             Review submissions, mint credentials, and protect institute trust.
           </h1>
-          <p className="text-[#c8d0de]">
+          <p className="text-[#a0a0a0]">
             This console is backed by MongoDB for workflow state, prepares public
             proof payloads, and relies on reviewer wallets to submit mint and
             revoke transactions on-chain.
@@ -803,10 +905,10 @@ export default function AdminPage() {
         <DashboardCard>
           <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <h2 className="display-serif mb-2 text-[2rem] font-semibold text-white">
+              <h2 className="mb-2 text-[2rem] font-semibold text-white">
                 Reviewer wallet sign-in required
               </h2>
-              <p className="max-w-2xl text-[#c8d0de]">
+              <p className="max-w-2xl text-[#a0a0a0]">
                 The reviewer console is protected by JWT session auth and wallet
                 role checks. Connect an authorized admin or verifier wallet to continue.
               </p>
@@ -859,7 +961,7 @@ export default function AdminPage() {
       isAuthenticated &&
       (user?.role === "admin" || user?.role === "verifier") ? (
         <>
-          <div className="mb-8 rounded-[24px_12px_24px_12px] border border-[#77997f]/24 bg-[#77997f]/10 px-5 py-4 text-sm text-[#d7ebd8]">
+          <div className="mb-8 rounded-xl border border-emerald-500/20 bg-emerald-500/08 px-5 py-4 text-sm text-emerald-300">
             The reviewer flow stays simple: inspect private evidence, set the EDU
             reward, optionally add expiry, and submit the mint from your wallet.
             Public proof artifacts publish automatically after approval.
@@ -877,12 +979,12 @@ export default function AdminPage() {
           <div className="mb-10 grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
             <MetricCard
               title="Pending Reviews"
-              value={<span className="text-[#fde4b8]">{pendingSubmissions.length}</span>}
+              value={<span className="text-[#f0f0f0]">{pendingSubmissions.length}</span>}
               accentColor="yellow"
             />
             <MetricCard
               title="Minted Credentials"
-              value={<span className="text-[#d7ebd8]">{mintedSubmissions.length}</span>}
+              value={<span className="text-emerald-300">{mintedSubmissions.length}</span>}
               accentColor="green"
             />
             <MetricCard
@@ -893,7 +995,7 @@ export default function AdminPage() {
             <MetricCard
               title="EDU Distributed"
               value={
-                <span className="text-[#d5e7f1]">
+                <span className="text-[#a5c0f8]">
                   {totalEduDistributed.toLocaleString()} EDU
                 </span>
               }
@@ -917,7 +1019,7 @@ export default function AdminPage() {
                     value={searchQuery}
                     onChange={(event) => setSearchQuery(event.target.value)}
                     placeholder="Search by credential title, type, institute, student wallet, file name, evidence hash, or proof CID"
-                    className="w-full rounded-[18px] border border-[#eedfce]/12 bg-[rgba(255,255,255,0.04)] px-4 py-3 text-white placeholder:text-[#8ea0b8] focus:border-[#d25b36]/45 focus:outline-none"
+                    className="w-full rounded-[18px] border border-white/[0.08] bg-[rgba(255,255,255,0.04)] px-4 py-3 text-white placeholder:text-[#a0a0a0] focus:border-[#4f7ef5]/45 focus:outline-none"
                   />
                   <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
                     <p className="text-xs text-slate-500">
@@ -941,7 +1043,7 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              <div className="mb-6 rounded-2xl border border-[#8bbbd5]/18 bg-[#8bbbd5]/10 p-4 text-sm text-[#d6edf8]">
+              <div className="mb-6 rounded-2xl border border-[#4f7ef5]/15 bg-[#4f7ef5]/08 p-4 text-sm text-[#a5c0f8]">
                 Reviewer shortcuts stay active while the workspace is open. Use{" "}
                 <span className="font-semibold text-white">[</span> and{" "}
                 <span className="font-semibold text-white">]</span> to move between
@@ -949,14 +1051,21 @@ export default function AdminPage() {
               </div>
 
               {isLoading ? (
-                <div className="py-12 text-center text-slate-300">
-                  Loading review queue...
+                <div className="space-y-4">
+                  <SkeletonBlock variant="card" lines={3} />
+                  <SkeletonBlock variant="card" lines={3} />
+                  <SkeletonBlock variant="card" lines={3} />
                 </div>
               ) : pendingSubmissions.length === 0 ? (
                 <EmptyStatePanel
                   eyebrow="Queue clear"
                   title="No pending credentials to review"
                   description="New student submissions will appear here automatically as soon as they enter the review queue."
+                  icon={
+                    <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25Z" />
+                    </svg>
+                  }
                 />
               ) : filteredPendingSubmissions.length === 0 ? (
                 <EmptyStatePanel
@@ -989,7 +1098,7 @@ export default function AdminPage() {
                         key={submission.id}
                         className={`rounded-2xl border p-5 transition ${
                           isSelected
-                            ? "border-[#d25b36]/35 bg-[#d25b36]/10 shadow-lg shadow-[#d25b36]/10"
+                            ? "border-[#4f7ef5]/35 bg-[#4f7ef5]/10 shadow-lg shadow-[#4f7ef5]/10"
                             : "border-white/10 bg-white/[0.03]"
                         }`}
                       >
@@ -1002,12 +1111,12 @@ export default function AdminPage() {
                               <p className="text-sm text-slate-400">
                                 {submission.instituteName}
                               </p>
-                              <div className="rounded-full border border-[#b8892d]/20 bg-[#b8892d]/10 px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-[#f3d9a2]">
+                              <div className="rounded-full border border-white/[0.10] bg-white/[0.04] px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-amber-200">
                                 {formatCredentialTypeLabel(submission.credentialType)}
                               </div>
                             </div>
                           </div>
-                          <div className="rounded-full border border-[#f0c57f]/24 bg-[#f0c57f]/10 px-3 py-1 text-xs font-medium text-[#fde4b8]">
+                          <div className="rounded-full border border-amber-500/25 bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-200">
                             Pending Review
                           </div>
                         </div>
@@ -1017,7 +1126,7 @@ export default function AdminPage() {
                             <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
                               Student
                             </div>
-                            <div className="mt-2 font-mono text-[#d5e7f1]">
+                            <div className="mt-2 font-mono text-[#a5c0f8]">
                               {truncateValue(submission.studentAddress, 12, 10)}
                             </div>
                           </div>
@@ -1025,7 +1134,7 @@ export default function AdminPage() {
                             <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
                               Evidence Hash
                             </div>
-                            <div className="mt-2 font-mono text-[#d5e7f1]">
+                            <div className="mt-2 font-mono text-[#a5c0f8]">
                               {truncateValue(submission.evidenceHash, 16, 12)}
                             </div>
                           </div>
@@ -1089,10 +1198,10 @@ export default function AdminPage() {
                               }
                               aria-invalid={Boolean(reviewFieldErrors[submission.id]?.eduAmount)}
                               aria-describedby={`eduAmountHint-${submission.id} eduAmountError-${submission.id}`}
-                              className={`w-full rounded-[18px] border px-4 py-3 text-white focus:border-[#d25b36]/45 focus:outline-none ${
+                              className={`w-full rounded-[18px] border px-4 py-3 text-white focus:border-[#4f7ef5]/45 focus:outline-none ${
                                 reviewFieldErrors[submission.id]?.eduAmount
                                   ? "border-rose-500/35 bg-rose-500/10"
-                                  : "border-[#eedfce]/12 bg-[rgba(255,255,255,0.04)]"
+                                  : "border-white/[0.08] bg-[rgba(255,255,255,0.04)]"
                               }`}
                             />
                             <p
@@ -1133,7 +1242,7 @@ export default function AdminPage() {
                                   },
                                 }))
                               }
-                              className="w-full rounded-[18px] border border-[#eedfce]/12 bg-[rgba(255,255,255,0.04)] px-4 py-3 text-white focus:border-[#d25b36]/45 focus:outline-none"
+                              className="w-full rounded-[18px] border border-white/[0.08] bg-[rgba(255,255,255,0.04)] px-4 py-3 text-white focus:border-[#4f7ef5]/45 focus:outline-none"
                             />
                             <p className="mt-2 text-sm text-slate-400">
                               Leave blank for non-expiring credentials.
@@ -1161,7 +1270,7 @@ export default function AdminPage() {
                               }
                               rows={3}
                               placeholder="Add an approval note or rejection reason"
-                              className="w-full rounded-[18px] border border-[#eedfce]/12 bg-[rgba(255,255,255,0.04)] px-4 py-3 text-white placeholder:text-[#8ea0b8] focus:border-[#d25b36]/45 focus:outline-none"
+                              className="w-full rounded-[18px] border border-white/[0.08] bg-[rgba(255,255,255,0.04)] px-4 py-3 text-white placeholder:text-[#a0a0a0] focus:border-[#4f7ef5]/45 focus:outline-none"
                             />
                             <p className="mt-2 text-sm text-slate-400">
                               Optional for approvals. Recommended for rejections so
@@ -1174,7 +1283,7 @@ export default function AdminPage() {
                           <button
                             type="button"
                             onClick={() => setSelectedSubmissionId(submission.id)}
-                            className="rounded-full border border-[#d25b36]/24 bg-[#d25b36]/10 px-4 py-2 text-sm font-medium text-[#ffd7c8] transition hover:bg-[#d25b36]/20"
+                            className="rounded-full border border-[#4f7ef5]/20 bg-[#4f7ef5]/08 px-4 py-2 text-sm font-medium text-[#a0a0a0] transition hover:bg-[#4f7ef5]/16"
                           >
                             {isSelected ? "Previewing" : "Review Workspace"}
                           </button>
@@ -1184,6 +1293,29 @@ export default function AdminPage() {
                             className="rounded-lg border border-white/10 px-4 py-2 text-sm text-white transition hover:bg-white/10"
                           >
                             Open Private Evidence
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleAnalyse(submission)}
+                            disabled={aiStates[submission.id]?.status === "loading"}
+                            className="flex items-center gap-2 rounded-lg border border-[#4f7ef5]/25 bg-[#4f7ef5]/08 px-4 py-2 text-sm font-medium text-[#a5c0f8] transition hover:bg-[#4f7ef5]/14 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {aiStates[submission.id]?.status === "loading" ? (
+                              <>
+                                <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                </svg>
+                                Analysing...
+                              </>
+                            ) : (
+                              <>
+                                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456Z" />
+                                </svg>
+                                Analyse with AI
+                              </>
+                            )}
                           </button>
                           <button
                             type="button"
@@ -1202,6 +1334,31 @@ export default function AdminPage() {
                             {isProcessing ? "Processing..." : "Prepare & Mint"}
                           </button>
                         </div>
+
+                        {/* AI Insight Panel */}
+                        {aiStates[submission.id]?.status === "error" ? (
+                          <div className="mt-4">
+                            <StatusBanner
+                              compact
+                              tone="warning"
+                              title="AI Analysis Failed"
+                              message={(aiStates[submission.id] as { status: "error"; message: string }).message}
+                            />
+                          </div>
+                        ) : aiStates[submission.id]?.status === "done" ? (
+                          <AiInsightPanel
+                            insight={(aiStates[submission.id] as { status: "done"; insight: AiInsight }).insight}
+                            onUseSuggestion={(amount) =>
+                              setReviewDrafts((d) => ({
+                                ...d,
+                                [submission.id]: {
+                                  ...(d[submission.id] ?? { eduAmount: "100", reviewNote: "", expiresAt: "" }),
+                                  eduAmount: String(amount),
+                                },
+                              }))
+                            }
+                          />
+                        ) : null}
                       </div>
                     )
                   })}
@@ -1213,10 +1370,10 @@ export default function AdminPage() {
               <DashboardCard title="Review Workspace">
                 {selectedSubmission ? (
                   <div className="space-y-5">
-                    <div className="rounded-2xl border border-[#ffd7c8]/14 bg-[#d25b36]/10 p-4">
+                    <div className="rounded-2xl border border-white/[0.08] bg-[#4f7ef5]/08 p-4">
                       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                         <div className="min-w-0">
-                          <div className="text-xs uppercase tracking-[0.3em] text-[#ffd7c8]">
+                          <div className="text-xs uppercase tracking-[0.3em] text-[#a0a0a0]">
                             Active Review Focus
                           </div>
                           <h3 className="mt-2 text-xl font-semibold text-white [overflow-wrap:anywhere]">
@@ -1226,7 +1383,7 @@ export default function AdminPage() {
                             <p className="text-slate-300">
                               {selectedSubmission.instituteName}
                             </p>
-                            <div className="rounded-full border border-[#b8892d]/20 bg-[#b8892d]/10 px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-[#f3d9a2]">
+                            <div className="rounded-full border border-white/[0.10] bg-white/[0.04] px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-amber-200">
                               {formatCredentialTypeLabel(selectedSubmission.credentialType)}
                             </div>
                           </div>
@@ -1257,7 +1414,7 @@ export default function AdminPage() {
                         <button
                           type="button"
                           onClick={() => void handleOpenEvidence(selectedSubmission)}
-                          className="rounded-full border border-[#8bbbd5]/24 bg-[#8bbbd5]/10 px-4 py-2 text-sm font-medium text-[#d6edf8] transition hover:bg-[#8bbbd5]/18"
+                          className="rounded-full border border-[#4f7ef5]/20 bg-[#4f7ef5]/08 px-4 py-2 text-sm font-medium text-[#a5c0f8] transition hover:bg-[#4f7ef5]/14"
                         >
                           Open Private Evidence
                         </button>
@@ -1269,7 +1426,7 @@ export default function AdminPage() {
                         <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
                           Student
                         </div>
-                        <div className="mt-2 font-mono text-sm text-[#d5e7f1]">
+                        <div className="mt-2 font-mono text-sm text-[#a5c0f8]">
                           {truncateValue(selectedSubmission.studentAddress, 12, 10)}
                         </div>
                       </div>
@@ -1309,8 +1466,8 @@ export default function AdminPage() {
                       )}
                     </div>
 
-                    <div className="rounded-2xl border border-[#8bbbd5]/16 bg-[rgba(139,187,213,0.08)] p-4">
-                      <div className="mb-3 text-xs uppercase tracking-[0.24em] text-[#d6edf8]">
+                    <div className="rounded-2xl border border-[#4f7ef5]/15 bg-[#4f7ef5]/06 p-4">
+                      <div className="mb-3 text-xs uppercase tracking-[0.24em] text-[#a5c0f8]">
                         Decision Snapshot
                       </div>
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -1384,7 +1541,7 @@ export default function AdminPage() {
                     </div>
 
                     <div>
-                      <div className="mb-3 text-xs uppercase tracking-[0.3em] text-[#ffd7c8]">
+                      <div className="mb-3 text-xs uppercase tracking-[0.3em] text-[#a0a0a0]">
                         Audit Trail
                       </div>
                       <AuditTrailList
@@ -1449,10 +1606,10 @@ export default function AdminPage() {
                         }))
                       }
                       placeholder="International Institute of Technology"
-                      className={`w-full rounded-[18px] border px-4 py-3 text-white focus:border-[#d25b36]/45 focus:outline-none ${
+                      className={`w-full rounded-[18px] border px-4 py-3 text-white focus:border-[#4f7ef5]/45 focus:outline-none ${
                         visibleInstituteFieldErrors.name
                           ? "border-rose-500/35 bg-rose-500/10"
-                          : "border-[#eedfce]/12 bg-[rgba(255,255,255,0.04)]"
+                          : "border-white/[0.08] bg-[rgba(255,255,255,0.04)]"
                       }`}
                       aria-invalid={Boolean(visibleInstituteFieldErrors.name)}
                       aria-describedby="newInstituteNameHint newInstituteNameError"
@@ -1490,10 +1647,10 @@ export default function AdminPage() {
                         }))
                       }
                       placeholder="IITX"
-                      className={`w-full rounded-[18px] border px-4 py-3 text-white focus:border-[#d25b36]/45 focus:outline-none ${
+                      className={`w-full rounded-[18px] border px-4 py-3 text-white focus:border-[#4f7ef5]/45 focus:outline-none ${
                         visibleInstituteFieldErrors.shortCode
                           ? "border-rose-500/35 bg-rose-500/10"
-                          : "border-[#eedfce]/12 bg-[rgba(255,255,255,0.04)]"
+                          : "border-white/[0.08] bg-[rgba(255,255,255,0.04)]"
                       }`}
                       aria-invalid={Boolean(visibleInstituteFieldErrors.shortCode)}
                       aria-describedby="newInstituteShortCodeHint newInstituteShortCodeError"
@@ -1583,7 +1740,7 @@ export default function AdminPage() {
                             </div>
                             <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-slate-400">
                               <span>{submission.instituteName}</span>
-                              <span className="rounded-full border border-[#b8892d]/20 bg-[#b8892d]/10 px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-[#f3d9a2]">
+                              <span className="rounded-full border border-white/[0.10] bg-white/[0.04] px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-amber-200">
                                 {formatCredentialTypeLabel(submission.credentialType)}
                               </span>
                             </div>
@@ -1656,6 +1813,26 @@ export default function AdminPage() {
           </div>
         </>
       ) : null}
+      <DestructiveActionModal
+        open={confirmModal !== null}
+        onOpenChange={(open) => {
+          if (!open) setConfirmModal(null)
+        }}
+        action={confirmModal?.action ?? "reject"}
+        submission={confirmModal?.submission ?? null}
+        isProcessing={
+          confirmModal !== null &&
+          processingSubmissionId === confirmModal.submission.id
+        }
+        onConfirm={(reason) => {
+          if (!confirmModal) return
+          if (confirmModal.action === "reject") {
+            void executeReject(confirmModal.submission)
+          } else {
+            void executeRevoke(confirmModal.submission, reason)
+          }
+        }}
+      />
     </PageLayout>
   )
 }

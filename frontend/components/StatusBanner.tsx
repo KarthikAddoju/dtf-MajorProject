@@ -17,8 +17,8 @@ interface StatusBannerProps {
 const toneClasses: Record<StatusBannerTone, string> = {
   neutral:
     "border-white/[0.10] bg-white/[0.04] text-[#a0a0a0]",
-  info: "border-[#4f7ef5]/20 bg-[#4f7ef5]/08 text-[#a5c0f8]",
-  success: "border-emerald-500/25 bg-emerald-500/08 text-emerald-300",
+  info: "border-[#4f7ef5]/20 bg-[#4f7ef5]/12 text-[#a5c0f8]",
+  success: "border-emerald-500/25 bg-emerald-500/10 text-emerald-300",
   warning: "border-amber-500/25 bg-amber-500/10 text-amber-200",
   error: "border-rose-500/25 bg-rose-500/10 text-rose-300",
 }

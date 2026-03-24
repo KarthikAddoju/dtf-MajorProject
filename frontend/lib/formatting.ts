@@ -30,6 +30,29 @@ export function formatCredentialTypeLabel(value: CredentialType | string) {
     .join(" ")
 }
 
+export function getCredentialTypeAccent(type: CredentialType | string): string {
+  switch (type) {
+    case "internship":
+      return "border-l-emerald-500"
+    case "hackathon":
+    case "competition":
+      return "border-l-amber-500"
+    case "certification":
+      return "border-l-[#4f7ef5]"
+    case "bootcamp":
+      return "border-l-violet-500"
+    case "course":
+      return "border-l-cyan-500"
+    case "workshop":
+    case "seminar":
+      return "border-l-teal-500"
+    case "quiz":
+      return "border-l-rose-400"
+    default:
+      return "border-l-[#666666]"
+  }
+}
+
 export function getAuditTrailEventAccent(type: AuditTrailEventType) {
   switch (type) {
     case "submission_created":

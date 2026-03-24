@@ -24,11 +24,19 @@ router.get("/disclosures", authenticate, async (req: AuthRequest, res) => {
       return sendError(res, 401, "UNAUTHORIZED", "You must be signed in");
     }
 
-    const records = await DisclosureRecordModel.find({
-      studentAddress: req.user.address,
-    })
-      .sort({ createdAt: -1 })
-      .lean();
+    const page = Math.max(1, parseInt(String(req.query.page ?? "1"), 10) || 1);
+    const limit = Math.min(50, Math.max(1, parseInt(String(req.query.limit ?? "20"), 10) || 20));
+    const skip = (page - 1) * limit;
+    const filter = { studentAddress: req.user.address };
+
+    const [records, total] = await Promise.all([
+      DisclosureRecordModel.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      DisclosureRecordModel.countDocuments(filter),
+    ]);
 
     return sendSuccess(res, {
       disclosures: records.map((r) => ({
@@ -42,6 +50,7 @@ router.get("/disclosures", authenticate, async (req: AuthRequest, res) => {
         claimCount: r.claimCount,
         createdAt: (r.createdAt as Date).toISOString(),
       })),
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     });
   } catch (error) {
     return handleServerError(res, error, "Could not load disclosure packages");

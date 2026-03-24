@@ -343,15 +343,19 @@ export default function HomePage() {
               </div>
 
               <div className="mt-10 grid gap-4 sm:grid-cols-3">
-                <StatCounter
-                  label="Live Colleges"
-                  value={analyticsOverview?.activeInstitutes ?? null}
-                />
-                <StatCounter
-                  label="EDU Minted"
-                  value={analyticsOverview?.totalEduMinted ?? null}
-                />
-                <div className="rounded-xl border border-white/[0.08] bg-[#2a2a2a] px-5 py-5 shadow-[0_12px_30px_rgba(8,12,20,0.08)]">
+                <div className="animate-fade-in-up">
+                  <StatCounter
+                    label="Live Colleges"
+                    value={analyticsOverview?.activeInstitutes ?? null}
+                  />
+                </div>
+                <div className="animate-fade-in-up animate-delay-100">
+                  <StatCounter
+                    label="EDU Minted"
+                    value={analyticsOverview?.totalEduMinted ?? null}
+                  />
+                </div>
+                <div className="animate-fade-in-up animate-delay-200 rounded-xl border border-white/[0.08] bg-[#2a2a2a] px-5 py-5 shadow-[0_12px_30px_rgba(8,12,20,0.08)]">
                   <div className="text-[11px] uppercase tracking-[0.28em] text-[#666666]">
                     Top Institute
                   </div>

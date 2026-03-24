@@ -46,6 +46,19 @@ app.use(
 );
 app.use(express.json({ limit: runtimeConfig.requestBodyLimit }));
 
+// Request logger
+app.use((req, _res, next) => {
+  const start = Date.now();
+  const originalEnd = _res.end.bind(_res);
+  _res.on("finish", () => {
+    const duration = Date.now() - start;
+    console.log(
+      `${req.method} ${req.originalUrl} ${_res.statusCode} ${duration}ms`
+    );
+  });
+  next();
+});
+
 app.use("/api/auth/challenge", createRateLimiter(10 * 60 * 1000, 15));
 app.use("/api/auth/verify", createRateLimiter(10 * 60 * 1000, 20));
 app.use("/api/upload", createRateLimiter(15 * 60 * 1000, 10));
@@ -72,6 +85,26 @@ app.use("/api/health", healthRoutes);
 app.use((_req, res) => {
   return sendError(res, 404, "NOT_FOUND", "Route not found");
 });
+
+// Global error handler — catches unhandled errors from route handlers
+app.use(
+  (
+    err: Error,
+    _req: express.Request,
+    res: express.Response,
+    _next: express.NextFunction
+  ) => {
+    console.error("[Unhandled Error]", err);
+    if (!res.headersSent) {
+      return sendError(
+        res,
+        500,
+        "INTERNAL_SERVER_ERROR",
+        "An unexpected error occurred"
+      );
+    }
+  }
+);
 
 mongoose.connect(runtimeConfig.mongodbUri)
 .then(async () => {

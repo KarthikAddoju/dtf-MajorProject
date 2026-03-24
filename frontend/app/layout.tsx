@@ -38,8 +38,17 @@ export default function RootLayout({
         </a>
         <ClientLayout>{children}</ClientLayout>
 
-        {/* Web3 transaction notifications */}
-        <Toaster richColors position="top-right" />
+        <Toaster
+          richColors
+          position="bottom-right"
+          toastOptions={{
+            duration: 3500,
+            style: {
+              borderRadius: "12px",
+              fontSize: "0.875rem",
+            },
+          }}
+        />
 
         <Analytics />
       </body>

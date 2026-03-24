@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
   Bar,
   BarChart,
@@ -34,6 +34,26 @@ export default function CollegesPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
+  const [debouncedQuery, setDebouncedQuery] = useState("")
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function handleSearchChange(value: string) {
+    setSearchQuery(value)
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
+    debounceTimerRef.current = setTimeout(() => setDebouncedQuery(value), 250)
+  }
+
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
+    }
+  }, [])
+
+  useEffect(() => {
+    const prev = document.title
+    document.title = "Institute Index — DACS"
+    return () => { document.title = prev }
+  }, [])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -89,7 +109,7 @@ export default function CollegesPage() {
     )
   }, [colleges])
   const filteredColleges = useMemo(() => {
-    const normalizedQuery = searchQuery.trim().toLowerCase()
+    const normalizedQuery = debouncedQuery.trim().toLowerCase()
 
     if (!normalizedQuery) {
       return colleges
@@ -101,7 +121,7 @@ export default function CollegesPage() {
         .toLowerCase()
         .includes(normalizedQuery)
     )
-  }, [colleges, searchQuery])
+  }, [colleges, debouncedQuery])
   const chartData = useMemo(
     () =>
       filteredColleges.slice(0, 6).map((college) => ({
@@ -236,7 +256,7 @@ export default function CollegesPage() {
               id="collegeSearch"
               type="text"
               value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
+              onChange={(event) => handleSearchChange(event.target.value)}
               placeholder="Search by institute name or slug"
               className="w-full rounded-[20px] border border-white/[0.08] bg-[rgba(255,255,255,0.04)] px-4 py-3 text-[#f0f0f0] placeholder:text-[#a0a0a0] focus:border-[#4f7ef5]/50 focus:outline-none"
             />
@@ -247,7 +267,7 @@ export default function CollegesPage() {
               {searchQuery.trim() ? (
                 <button
                   type="button"
-                  onClick={() => setSearchQuery("")}
+                  onClick={() => handleSearchChange("")}
                   className="rounded-full border border-white/[0.08] bg-[rgba(255,255,255,0.05)] px-3 py-1.5 text-xs font-medium uppercase tracking-[0.16em] text-[#f0f0f0] transition hover:bg-[rgba(255,255,255,0.1)]"
                 >
                   Clear Search

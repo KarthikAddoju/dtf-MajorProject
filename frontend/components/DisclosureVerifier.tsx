@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { type DragEvent, useCallback, useRef, useState } from "react"
 import { fetchVerificationRecord, isAbortError } from "@/lib/api"
 import { verifyMerkleProof } from "@/lib/merkle"
 import type { DisclosurePackage } from "@/lib/types"
@@ -18,6 +18,15 @@ function formatClaimValue(value: unknown): string {
   if (typeof value === "number") return value.toLocaleString()
   if (typeof value === "boolean") return value ? "Yes" : "No"
   return JSON.stringify(value)
+}
+
+function formatExpiryDate(value: string): string {
+  const d = new Date(value)
+  if (isNaN(d.getTime())) return value
+  return new Intl.DateTimeFormat("en-IN", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(d)
 }
 
 function isDisclosurePackage(value: unknown): value is DisclosurePackage {
@@ -42,11 +51,49 @@ export function DisclosureVerifier() {
   const [onChainRoot, setOnChainRoot] = useState<string | null>(null)
   const [rootMismatch, setRootMismatch] = useState(false)
   const [isExpired, setIsExpired] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [pkgMeta, setPkgMeta] = useState<{
     tokenId: string
     audience: string | null
     expiresAt: string | null
   } | null>(null)
+
+  const loadFileContents = useCallback((file: File) => {
+    if (!file.name.endsWith(".json") && file.type !== "application/json") {
+      setErrorMessage("Only JSON files are accepted. Paste JSON text or drop a .json file.")
+      setVerifyStatus("error")
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        setRawInput(reader.result)
+        setVerifyStatus("idle")
+        setResults([])
+        setErrorMessage(null)
+        setIsExpired(false)
+      }
+    }
+    reader.onerror = () => {
+      setErrorMessage("Could not read the file. Please paste the JSON manually.")
+      setVerifyStatus("error")
+    }
+    reader.readAsText(file)
+  }, [])
+
+  function handleFileDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault()
+    setIsDragging(false)
+    const file = event.dataTransfer.files?.[0]
+    if (file) loadFileContents(file)
+  }
+
+  function handleFileSelect(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    if (file) loadFileContents(file)
+    event.target.value = ""
+  }
 
   async function handleVerify() {
     setVerifyStatus("loading")
@@ -133,13 +180,40 @@ export function DisclosureVerifier() {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       {/* Input area */}
-      <div className="rounded-xl border border-white/[0.08] bg-[#1a1a1a] p-5">
-        <label
-          htmlFor="disclosure-input"
-          className="mb-3 block text-sm font-medium text-[#c0c0c0]"
-        >
-          Paste Disclosure Package JSON
-        </label>
+      <div
+        className={`rounded-xl border bg-[#1a1a1a] p-5 transition ${
+          isDragging
+            ? "border-[#4f7ef5]/55 bg-[#4f7ef5]/[0.04]"
+            : "border-white/[0.08]"
+        }`}
+        onDrop={handleFileDrop}
+        onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
+        onDragLeave={(e) => { e.preventDefault(); setIsDragging(false) }}
+      >
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <label
+            htmlFor="disclosure-input"
+            className="block text-sm font-medium text-[#c0c0c0]"
+          >
+            {isDragging ? "Drop JSON file here" : "Paste Disclosure Package JSON"}
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json,application/json"
+              onChange={handleFileSelect}
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="rounded-lg border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-xs text-[#a0a0a0] transition hover:bg-white/[0.08] cursor-pointer"
+            >
+              Browse File
+            </button>
+          </div>
+        </div>
         <textarea
           id="disclosure-input"
           value={rawInput}
@@ -158,8 +232,8 @@ export function DisclosureVerifier() {
         />
         <div className="mt-3 flex items-center justify-between gap-3">
           <p className="text-xs text-[#666666]">
-            The package is verified entirely client-side against the on-chain Merkle root.
-            No credentials or private data are sent anywhere.
+            Verified entirely client-side against the on-chain Merkle root.
+            Drop a .json file or paste text — no data is sent anywhere.
           </p>
           <button
             type="button"
@@ -193,8 +267,12 @@ export function DisclosureVerifier() {
               </div>
             )}
             {pkgMeta.expiresAt && (
-              <div className="rounded-full border border-amber-500/20 bg-amber-500/08 px-3 py-1 text-xs text-amber-200">
-                Expires: {pkgMeta.expiresAt}
+              <div className={`rounded-full border px-3 py-1 text-xs ${
+                isExpired
+                  ? "border-rose-500/20 bg-rose-500/08 text-rose-300"
+                  : "border-amber-500/20 bg-amber-500/08 text-amber-200"
+              }`}>
+                {isExpired ? "Expired" : "Expires"}: {formatExpiryDate(pkgMeta.expiresAt)}
               </div>
             )}
             {onChainRoot && (
@@ -217,7 +295,7 @@ export function DisclosureVerifier() {
             <div className="rounded-xl border border-rose-500/25 bg-rose-500/08 px-4 py-3 text-sm text-rose-300">
               <span className="font-medium">Disclosure package expired.</span>{" "}
               The sharer marked this package as valid only until{" "}
-              <span className="font-mono">{pkgMeta.expiresAt}</span>. The Merkle proofs
+              <span className="font-mono">{formatExpiryDate(pkgMeta.expiresAt)}</span>. The Merkle proofs
               are still verified below, but you should request a fresh disclosure.
             </div>
           )}

@@ -2,7 +2,6 @@
 
 import Link from "next/link"
 import { useEffect, useRef, useState } from "react"
-import { toast } from "sonner"
 import { CredentialTimeline } from "@/components/CredentialTimeline"
 import { DashboardCard } from "@/components/DashboardCard"
 import { EmptyStatePanel } from "@/components/EmptyStatePanel"
@@ -13,6 +12,7 @@ import { SkeletonBlock } from "@/components/SkeletonBlock"
 import { StatusBanner } from "@/components/StatusBanner"
 import { SubmissionStatusCenter } from "@/components/SubmissionStatusCenter"
 import { WalletBadge } from "@/components/WalletBadge"
+import { CopyButton } from "@/components/CopyButton"
 import { DisclosureBuilderModal } from "@/components/DisclosureBuilderModal"
 import { useAuth } from "@/components/AuthProvider"
 import { fetchMySubmissions, fetchMyDisclosures, isAbortError } from "@/lib/api"
@@ -23,6 +23,7 @@ import { getWalletSignInLabel } from "@/lib/wallet"
 import {
   formatCredentialTypeLabel,
   formatDateTime,
+  getCredentialTypeAccent,
   truncateValue,
 } from "@/lib/formatting"
 import type { OnChainOwnedCertificate, SavedDisclosureRecord, Submission } from "@/lib/types"
@@ -97,6 +98,12 @@ export default function DashboardPage() {
   const [retryNonce, setRetryNonce] = useState(0)
   const [disclosureTokenId, setDisclosureTokenId] = useState<string | null>(null)
   const [savedDisclosures, setSavedDisclosures] = useState<SavedDisclosureRecord[]>([])
+
+  useEffect(() => {
+    const prev = document.title
+    document.title = "Student Dashboard — DACS"
+    return () => { document.title = prev }
+  }, [])
 
   useEffect(() => {
     if (!token || !user) {
@@ -606,7 +613,11 @@ export default function DashboardPage() {
                     return (
                       <div
                         key={certificate.tokenId}
-                        className="rounded-2xl border border-white/10 bg-white/[0.03] p-5"
+                        className={`rounded-2xl border border-white/10 border-l-4 bg-white/[0.03] p-5 ${
+                          submission
+                            ? getCredentialTypeAccent(submission.credentialType)
+                            : "border-l-[#666666]"
+                        }`}
                       >
                         <div className="mb-4 flex items-start justify-between gap-3">
                           <div className="min-w-0">
@@ -681,34 +692,17 @@ export default function DashboardPage() {
                               Open Private Evidence
                             </button>
                           ) : null}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              void navigator.clipboard.writeText(certificate.tokenId)
-                              toast.success(`Token ID #${certificate.tokenId} copied`)
-                            }}
-                            className="flex items-center gap-1.5 rounded-lg border border-white/10 px-4 py-2 text-sm text-[#a0a0a0] transition hover:bg-white/10"
-                          >
-                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75" />
-                            </svg>
-                            Copy Token ID
-                          </button>
+                          <CopyButton
+                            value={certificate.tokenId}
+                            label="Copy Token ID"
+                            successMessage={`Token ID #${certificate.tokenId} copied`}
+                          />
                           {submission?.txHash ? (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                void navigator.clipboard.writeText(submission.txHash!)
-                                toast.success("Transaction hash copied")
-                              }}
-                              className="flex items-center gap-1.5 rounded-lg border border-white/10 px-4 py-2 text-sm text-[#a0a0a0] transition hover:bg-white/10"
-                              title={`TX: ${submission.txHash}`}
-                            >
-                              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
-                              </svg>
-                              Copy TX Hash
-                            </button>
+                            <CopyButton
+                              value={submission.txHash}
+                              label="Copy TX Hash"
+                              successMessage="Transaction hash copied"
+                            />
                           ) : null}
                           <Link
                             href={`/verify?tokenId=${certificate.tokenId}`}
@@ -828,19 +822,11 @@ export default function DashboardPage() {
                             Open Private Evidence
                           </button>
                           {submission.txHash ? (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                void navigator.clipboard.writeText(submission.txHash!)
-                                toast.success("Transaction hash copied")
-                              }}
-                              className="flex items-center gap-1.5 rounded-lg border border-white/10 px-4 py-2 text-sm text-[#a0a0a0] transition hover:bg-white/10"
-                            >
-                              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
-                              </svg>
-                              Copy TX Hash
-                            </button>
+                            <CopyButton
+                              value={submission.txHash}
+                              label="Copy TX Hash"
+                              successMessage="Transaction hash copied"
+                            />
                           ) : null}
                           {submission.tokenId ? (
                             staleTokenIds.has(submission.tokenId) ? (
@@ -933,16 +919,12 @@ export default function DashboardPage() {
                         </div>
                       </div>
                       <div className="flex shrink-0 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            void navigator.clipboard.writeText(pkgJson)
-                            toast.success("Disclosure package JSON copied")
-                          }}
-                          className="cursor-pointer rounded-lg border border-white/10 px-3 py-1.5 text-xs text-[#a0a0a0] transition hover:bg-white/10"
-                        >
-                          Copy JSON
-                        </button>
+                        <CopyButton
+                          value={pkgJson}
+                          label="Copy JSON"
+                          successMessage="Disclosure package JSON copied"
+                          className="cursor-pointer rounded-lg border border-white/10 px-3 py-1.5 text-xs text-[#a0a0a0] transition hover:bg-white/10 flex items-center gap-1.5"
+                        />
                         <button
                           type="button"
                           onClick={() => {

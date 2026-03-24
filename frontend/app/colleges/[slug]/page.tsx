@@ -7,6 +7,7 @@ import { DashboardCard } from "@/components/DashboardCard"
 import { EmptyStatePanel } from "@/components/EmptyStatePanel"
 import { MetricCard } from "@/components/MetricCard"
 import { PageLayout } from "@/components/PageLayout"
+import { SkeletonBlock } from "@/components/SkeletonBlock"
 import { StatusBanner } from "@/components/StatusBanner"
 import { fetchInstituteProfile, isAbortError } from "@/lib/api"
 import {
@@ -64,6 +65,16 @@ export default function InstituteProfilePage() {
     return () => controller.abort()
   }, [slug])
 
+  useEffect(() => {
+    const prev = document.title
+    document.title = profile
+      ? `${profile.institute.name} — DACS Institute Profile`
+      : isLoading
+        ? "Loading Profile — DACS"
+        : "Institute Profile — DACS"
+    return () => { document.title = prev }
+  }, [profile, isLoading])
+
   const courseLeaderboard = useMemo(() => {
     return (profile?.topCourses ?? []).map((course) => ({
       ...course,
@@ -88,12 +99,33 @@ export default function InstituteProfilePage() {
 
   return (
     <PageLayout>
+      <nav aria-label="Breadcrumb" className="mb-6">
+        <Link
+          href="/colleges"
+          className="inline-flex items-center gap-1.5 text-sm text-[#666666] transition hover:text-[#a5c0f8]"
+        >
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" aria-hidden="true">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+          </svg>
+          Back to College Index
+        </Link>
+      </nav>
+
       {isLoading ? (
-        <DashboardCard>
-          <div className="py-16 text-center text-slate-300">
-            Loading institute profile...
+        <div className="space-y-6">
+          <SkeletonBlock variant="card" lines={5} />
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-5">
+            <SkeletonBlock variant="metric" />
+            <SkeletonBlock variant="metric" />
+            <SkeletonBlock variant="metric" />
+            <SkeletonBlock variant="metric" />
+            <SkeletonBlock variant="metric" />
           </div>
-        </DashboardCard>
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+            <SkeletonBlock variant="card" lines={4} />
+            <SkeletonBlock variant="card" lines={4} />
+          </div>
+        </div>
       ) : errorMessage || !profile ? (
         <DashboardCard>
           <EmptyStatePanel

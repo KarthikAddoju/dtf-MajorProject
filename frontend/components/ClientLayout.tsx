@@ -1,6 +1,7 @@
 "use client"
 
 import { AuthProvider, useAuth } from "@/components/AuthProvider"
+import { ErrorBoundary } from "@/components/ErrorBoundary"
 import { Navbar } from "@/components/Navbar"
 import { useBlockNumber } from "@/hooks/use-block-number"
 
@@ -45,7 +46,11 @@ function ClientShell({
         isChainLive={isChainLive}
       />
 
-      {children}
+      <main id="main-content">
+        <ErrorBoundary>
+          {children}
+        </ErrorBoundary>
+      </main>
     </>
   )
 }

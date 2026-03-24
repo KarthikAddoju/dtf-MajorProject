@@ -130,6 +130,18 @@
       radial-gradient(ellipse 80% 50% at 50% -20%, rgba(79, 126, 245, 0.07), transparent);
   }
 
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    pointer-events: none;
+    opacity: 0.025;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-repeat: repeat;
+    background-size: 256px 256px;
+  }
+
   ::selection {
     background: rgba(79, 126, 245, 0.25);
     color: #f0f0f0;
@@ -138,6 +150,7 @@
   :where(a, button, input, select, textarea, [role="button"]):focus-visible {
     outline: 2px solid rgba(79, 126, 245, 0.85);
     outline-offset: 3px;
+    box-shadow: 0 0 0 6px rgba(79, 126, 245, 0.12);
   }
 }
 
@@ -346,7 +359,8 @@
 
 .brand-button-primary:active {
   background: #3060cc;
-  transform: scale(0.97);
+  transform: scale(0.965);
+  transition: transform 80ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .brand-button-primary:disabled {
@@ -382,7 +396,8 @@
 
 .brand-button-secondary:active {
   background: rgba(255, 255, 255, 0.08);
-  transform: scale(0.97);
+  transform: scale(0.965);
+  transition: transform 80ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .brand-button-secondary:disabled {
@@ -475,6 +490,105 @@
   background: rgba(52, 211, 153, 0.06);
   padding: 0.875rem 1rem;
   color: #6ee7b7;
+}
+
+/* ─── Spotlight Card ──────────────────────────────────────── */
+
+.spotlight-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.spotlight-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 300ms ease;
+  pointer-events: none;
+  background: radial-gradient(
+    var(--spotlight-size, 350px) circle at var(--spotlight-x, -999px) var(--spotlight-y, -999px),
+    var(--spotlight-color, rgba(79, 126, 245, 0.08)),
+    transparent 100%
+  );
+}
+
+.spotlight-card:hover::before {
+  opacity: 1;
+}
+
+/* ─── Skeleton Shimmer ───────────────────────────────────── */
+
+@keyframes shimmer {
+  0% {
+    background-position: -400px 0;
+  }
+  100% {
+    background-position: 400px 0;
+  }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.04) 40%,
+    rgba(255, 255, 255, 0.06) 50%,
+    rgba(255, 255, 255, 0.04) 60%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  background-size: 800px 100%;
+  animation: shimmer 1.8s ease-in-out infinite;
+}
+
+/* ─── Page Entrance Animations ───────────────────────────── */
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 400ms ease-out both;
+}
+
+.animate-fade-in {
+  animation: fade-in 300ms ease-out both;
+}
+
+.animate-delay-100 {
+  animation-delay: 100ms;
+}
+
+.animate-delay-200 {
+  animation-delay: 200ms;
+}
+
+.animate-delay-300 {
+  animation-delay: 300ms;
+}
+
+.animate-delay-400 {
+  animation-delay: 400ms;
+}
+
+.animate-delay-500 {
+  animation-delay: 500ms;
 }
 
 /* ─── Reduced Motion ──────────────────────────────────────── */

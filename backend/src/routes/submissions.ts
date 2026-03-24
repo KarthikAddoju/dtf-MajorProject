@@ -17,12 +17,22 @@ router.get("/", authenticate, authorize("admin", "verifier"), async (req: AuthRe
       return sendError(res, 403, "FORBIDDEN", "Forbidden");
     }
 
-    const submissions = await CertificateSubmissionModel.find(reviewerScope)
-      .sort({ uploadedAt: -1 })
-      .lean();
+    const page = Math.max(1, parseInt(String(req.query.page ?? "1"), 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit ?? "50"), 10) || 50));
+    const skip = (page - 1) * limit;
+
+    const [submissions, total] = await Promise.all([
+      CertificateSubmissionModel.find(reviewerScope)
+        .sort({ uploadedAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      CertificateSubmissionModel.countDocuments(reviewerScope),
+    ]);
 
     return sendSuccess(res, {
       submissions: submissions.map(toSubmissionResponse),
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     });
   } catch (error) {
     return handleServerError(res, error, "Could not load submissions");
@@ -57,15 +67,23 @@ router.get("/pending", authenticate, authorize("admin", "verifier"), async (req:
       return sendError(res, 403, "FORBIDDEN", "Forbidden");
     }
 
-    const submissions = await CertificateSubmissionModel.find({
-      ...reviewerScope,
-      status: "pending_review",
-    })
-      .sort({ uploadedAt: 1 })
-      .lean();
+    const page = Math.max(1, parseInt(String(req.query.page ?? "1"), 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit ?? "50"), 10) || 50));
+    const skip = (page - 1) * limit;
+    const filter = { ...reviewerScope, status: "pending_review" };
+
+    const [submissions, total] = await Promise.all([
+      CertificateSubmissionModel.find(filter)
+        .sort({ uploadedAt: 1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      CertificateSubmissionModel.countDocuments(filter),
+    ]);
 
     return sendSuccess(res, {
       submissions: submissions.map(toSubmissionResponse),
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     });
   } catch (error) {
     return handleServerError(res, error, "Could not load pending submissions");

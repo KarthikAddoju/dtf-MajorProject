@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { useState } from "react"
 import { StatusBanner } from "./StatusBanner"
 import { WalletBadge } from "./WalletBadge"
 import { RoleBadge } from "./RoleBadge"
@@ -51,6 +52,7 @@ export function Navbar({
   isChainLive = false,
 }: NavbarProps) {
   const pathname = usePathname()
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const networkLabel = getWalletNetworkLabel(chainId ?? null)
   const sessionLabel = isAuthenticated
     ? user?.role === "admin"
@@ -128,8 +130,27 @@ export function Navbar({
             </div>
           </Link>
 
-          {/* Nav links */}
-          <div className="flex items-center gap-1 overflow-x-auto">
+          {/* Mobile hamburger */}
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen((prev) => !prev)}
+            className="rounded-lg p-2 text-[#a0a0a0] transition hover:bg-white/[0.06] hover:text-[#f0f0f0] md:hidden"
+            aria-label={mobileMenuOpen ? "Close navigation menu" : "Open navigation menu"}
+            aria-expanded={mobileMenuOpen}
+          >
+            {mobileMenuOpen ? (
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+              </svg>
+            ) : (
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+              </svg>
+            )}
+          </button>
+
+          {/* Nav links (desktop) */}
+          <div className="hidden items-center gap-1 overflow-x-auto md:flex">
             {navLinks.map((link) => {
               const isActive =
                 pathname === link.href ||
@@ -138,6 +159,7 @@ export function Navbar({
                 <Link
                   key={link.href}
                   href={link.href}
+                  aria-current={isActive ? "page" : undefined}
                   className={`shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors duration-150 ${
                     isActive
                       ? "bg-[#1d2b4a] text-[#a5c0f8]"
@@ -158,12 +180,12 @@ export function Navbar({
               {sessionLabel}
             </div>
             <div
-              className={`rounded-full border px-2.5 py-1 text-[10px] font-medium ${networkTone}`}
+              className={`hidden rounded-full border px-2.5 py-1 text-[10px] font-medium sm:inline-flex ${networkTone}`}
             >
               {networkLabel}
             </div>
             <div
-              className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-medium ${
+              className={`hidden items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-medium sm:inline-flex ${
                 isChainLive
                   ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-300"
                   : "border-white/[0.08] bg-transparent text-[#666666]"
@@ -182,10 +204,12 @@ export function Navbar({
             </div>
             {user?.role ? <RoleBadge role={user.role} /> : null}
             {walletAddress ? (
-              <WalletBadge
-                address={walletAddress}
-                label={isAuthenticated ? "Verified Wallet" : "Connected Wallet"}
-              />
+              <div className="hidden sm:inline-flex">
+                <WalletBadge
+                  address={walletAddress}
+                  label={isAuthenticated ? "Verified Wallet" : "Connected Wallet"}
+                />
+              </div>
             ) : null}
 
             {/* Actions */}
@@ -215,6 +239,52 @@ export function Navbar({
             )}
           </div>
         </div>
+
+        {/* Mobile nav menu */}
+        {mobileMenuOpen ? (
+          <div className="border-t border-white/[0.06] px-5 py-3 md:hidden">
+            <div className="flex flex-col gap-1">
+              {navLinks.map((link) => {
+                const isActive =
+                  pathname === link.href ||
+                  (link.href !== "/" && pathname.startsWith(link.href))
+                return (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    aria-current={isActive ? "page" : undefined}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={`rounded-lg px-3 py-2.5 text-sm font-medium transition ${
+                      isActive
+                        ? "bg-[#1d2b4a] text-[#a5c0f8]"
+                        : "text-[#a0a0a0] hover:bg-white/[0.04] hover:text-[#f0f0f0]"
+                    }`}
+                  >
+                    {link.label}
+                  </Link>
+                )
+              })}
+              <div className="mt-2 flex flex-wrap gap-2 border-t border-white/[0.06] pt-3">
+                {isAuthenticated ? (
+                  <button
+                    onClick={() => { onLogout?.(); setMobileMenuOpen(false) }}
+                    className="brand-button-secondary w-full px-3 py-2.5 text-sm"
+                  >
+                    Logout
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => { void onConnectWallet?.(); setMobileMenuOpen(false) }}
+                    disabled={isBusy}
+                    className="brand-button-primary w-full px-3 py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {walletActionLabel}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         {warningMessage || walletNote ? (
           <div className="border-t border-white/[0.06] px-5 py-3">

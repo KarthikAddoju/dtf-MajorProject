@@ -1,10 +1,18 @@
 import { ReactNode } from "react"
+import { SpotlightCard } from "./SpotlightCard"
 
 interface MetricCardProps {
   title: string
   value: string | ReactNode
   icon?: ReactNode
   accentColor?: "blue" | "purple" | "yellow" | "green"
+}
+
+const spotlightColors: Record<string, string> = {
+  blue: "rgba(79, 126, 245, 0.10)",
+  purple: "rgba(167, 139, 250, 0.10)",
+  yellow: "rgba(245, 158, 11, 0.08)",
+  green: "rgba(52, 211, 153, 0.08)",
 }
 
 export function MetricCard({ title, value, icon, accentColor = "blue" }: MetricCardProps) {
@@ -23,7 +31,10 @@ export function MetricCard({ title, value, icon, accentColor = "blue" }: MetricC
   }
 
   return (
-    <div className="brand-panel brand-card-hover min-h-[172px] p-6">
+    <SpotlightCard
+      className="brand-panel brand-card-hover min-h-[172px] p-6"
+      spotlightColor={spotlightColors[accentColor]}
+    >
       <div
         className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${accentStyles[accentColor]}`}
       />
@@ -41,6 +52,6 @@ export function MetricCard({ title, value, icon, accentColor = "blue" }: MetricC
           <div className="mt-5 h-px bg-gradient-to-r from-[#4f7ef5]/40 via-[#4f7ef5]/15 to-transparent" />
         </div>
       </div>
-    </div>
+    </SpotlightCard>
   )
 }

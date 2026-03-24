@@ -68,6 +68,7 @@ const ACCEPTED_MIME_TYPES = new Set([
   "image/png",
   "image/jpeg",
   "image/jpg",
+  "image/webp",
 ])
 
 function formatDate(value: string | null) {
@@ -113,7 +114,7 @@ function getStatusLabel(status: SubmissionStatus) {
 
 function validateFile(file: File) {
   if (!ACCEPTED_MIME_TYPES.has(file.type)) {
-    return "Upload a PDF, PNG, or JPEG credential evidence file."
+    return "Upload a PDF, PNG, JPEG, or WebP credential evidence file."
   }
 
   if (file.size > MAX_FILE_SIZE_BYTES) {
@@ -190,6 +191,12 @@ export default function UploadPage() {
   })
   const [draftRestored, setDraftRestored] = useState(false)
   const draftSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    const prev = document.title
+    document.title = "Upload Credential — DACS"
+    return () => { document.title = prev }
+  }, [])
 
   // Restore draft from localStorage on mount
   useEffect(() => {
@@ -531,7 +538,7 @@ export default function UploadPage() {
         ready: !!selectedFile,
         detail: selectedFile
           ? `${selectedFile.name} • ${(selectedFile.size / 1024 / 1024).toFixed(2)} MB`
-          : "Attach a PDF, PNG, or JPEG file",
+          : "Attach a PDF, PNG, JPEG, or WebP file",
       },
     ],
     [
@@ -813,7 +820,7 @@ export default function UploadPage() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".pdf,.png,.jpg,.jpeg"
+                accept=".pdf,.png,.jpg,.jpeg,.webp"
                 onChange={handleFileChange}
                 className="hidden"
               />
@@ -859,18 +866,20 @@ export default function UploadPage() {
                   </svg>
                 </div>
                 <h3 className="mb-2 text-[2rem] font-semibold text-[#f0f0f0]">
-                  Drop your evidence file here
+                  {isDragging ? "Release to attach" : "Drop your evidence file here"}
                 </h3>
                 <p className="text-[#a0a0a0]">
-                  Click to browse your system or drag in a PDF, PNG, or JPEG.
+                  {isDragging
+                    ? "DACS will validate the file type and size automatically."
+                    : "Click to browse your system or drag in a PDF, PNG, JPEG, or WebP."}
                 </p>
                 <p className="mt-3 text-xs uppercase tracking-[0.32em] text-[#666666]">
                   Max 10 MB
                 </p>
               </div>
               <p id="credentialFileHint" className="brand-field-hint">
-                PDF exports are ideal for formal credentials; PNG and JPEG work well
-                for workshop, hackathon, or competition evidence.
+                PDF exports are ideal for formal credentials; PNG, JPEG, and WebP work
+                well for workshop, hackathon, or competition evidence.
               </p>
               {visibleFieldErrors.certificate ? (
                 <p id="credentialFileError" className="brand-field-error" role="alert">

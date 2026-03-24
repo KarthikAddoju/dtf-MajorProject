@@ -13,7 +13,7 @@ export function SkeletonBlock({
   lines = 1,
   className = "",
 }: SkeletonBlockProps) {
-  const base = "bg-white/[0.06]"
+  const base = "bg-white/[0.06] skeleton-shimmer"
 
   if (variant === "heading") {
     return (

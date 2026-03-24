@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useRef } from "react"
 import {
   Dialog,
   DialogContent,
@@ -28,18 +28,14 @@ export function DestructiveActionModal({
   onConfirm,
   isProcessing = false,
 }: DestructiveActionModalProps) {
-  const [reason, setReason] = useState("")
-
-  // Reset reason whenever the submission changes
-  useEffect(() => {
-    setReason("")
-  }, [submission?.id])
+  const reasonRef = useRef<HTMLTextAreaElement | null>(null)
 
   if (!submission) return null
 
   const isRevoke = action === "revoke"
 
   function handleConfirm() {
+    const reason = reasonRef.current?.value.trim() ?? ""
     onConfirm(isRevoke ? reason : undefined)
   }
 
@@ -99,8 +95,9 @@ export function DestructiveActionModal({
               Revocation reason <span className="text-[#666666]">(optional)</span>
             </label>
             <textarea
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
+              key={`${submission.id}:${action}:${open ? "open" : "closed"}`}
+              ref={reasonRef}
+              defaultValue=""
               placeholder="e.g. Academic misconduct, credential data error, duplicate submission..."
               rows={3}
               className="brand-input w-full resize-none"

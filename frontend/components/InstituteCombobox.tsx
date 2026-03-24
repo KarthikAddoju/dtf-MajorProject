@@ -68,7 +68,6 @@ export function InstituteCombobox({
         <button
           type="button"
           disabled={isDisabled}
-          aria-invalid={hasError}
           aria-expanded={open}
           aria-haspopup="listbox"
           className={`brand-input flex w-full items-center justify-between text-left ${

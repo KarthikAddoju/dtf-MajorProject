@@ -10,15 +10,12 @@ export function useCountUp(
   const [current, setCurrent] = useState(0)
   const frameRef = useRef<number | null>(null)
   const startTimeRef = useRef<number | null>(null)
+  const shouldAnimate = enabled && target !== 0
 
   useEffect(() => {
-    if (!enabled || target === 0) {
-      setCurrent(target)
-      return
-    }
-
-    setCurrent(0)
+    if (frameRef.current !== null) cancelAnimationFrame(frameRef.current)
     startTimeRef.current = null
+    if (!shouldAnimate) return
 
     function step(timestamp: number) {
       if (!startTimeRef.current) startTimeRef.current = timestamp
@@ -38,7 +35,7 @@ export function useCountUp(
     return () => {
       if (frameRef.current !== null) cancelAnimationFrame(frameRef.current)
     }
-  }, [target, duration, enabled])
+  }, [target, duration, shouldAnimate])
 
-  return current
+  return shouldAnimate ? current : target
 }

@@ -185,7 +185,6 @@ export default function DashboardPage() {
     loadDashboardData()
 
     return () => controller.abort()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, user, retryNonce])
 
   // Auto-poll every 30s when there are pending submissions
@@ -224,7 +223,6 @@ export default function DashboardPage() {
       clearInterval(intervalId)
       setIsPolling(false)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, user, isAuthenticated])
 
   const mintedSubmissions = submissions.filter(

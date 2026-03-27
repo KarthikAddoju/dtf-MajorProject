@@ -214,6 +214,10 @@ export type CertificateSubmission = InferSchemaType<
 export type CertificateSubmissionDocument =
   HydratedDocument<CertificateSubmission>;
 
+// Compound indexes for common query patterns
+certificateSubmissionSchema.index({ studentAddress: 1, status: 1 });
+certificateSubmissionSchema.index({ instituteId: 1, status: 1 });
+
 export const CertificateSubmissionModel =
   models.CertificateSubmission ||
   model("CertificateSubmission", certificateSubmissionSchema);

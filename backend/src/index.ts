@@ -38,7 +38,12 @@ function createRateLimiter(windowMs: number, limit: number) {
 }
 
 app.disable("x-powered-by");
-app.use(helmet());
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    frameguard: { action: "deny" },
+  })
+);
 app.use(
   cors({
     origin: runtimeConfig.frontendOrigin,
@@ -105,6 +110,17 @@ app.use(
     }
   }
 );
+
+function gracefulShutdown(signal: string) {
+  console.log(`\n${signal} received — shutting down gracefully`);
+  mongoose
+    .disconnect()
+    .then(() => process.exit(0))
+    .catch(() => process.exit(1));
+}
+
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 
 mongoose.connect(runtimeConfig.mongodbUri)
 .then(async () => {

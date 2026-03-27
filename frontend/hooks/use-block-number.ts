@@ -43,6 +43,10 @@ export function useBlockNumber(intervalMs = 15_000) {
     return () => {
       mounted = false
       clearInterval(id)
+      if (providerRef.current) {
+        providerRef.current.destroy()
+        providerRef.current = null
+      }
     }
   }, [intervalMs])
 

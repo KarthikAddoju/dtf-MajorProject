@@ -153,19 +153,27 @@ export function DisclosureVerifier() {
         }
       )
 
-      setResults(claimResults)
-      setAllValid(claimResults.length > 0 && claimResults.every((r) => r.valid))
+      // Step 5: check if the package has expired — expired disclosures are invalid
+      let packageExpired = false
+      if (pkg.expiresAt) {
+        const d = new Date(pkg.expiresAt)
+        packageExpired = !isNaN(d.getTime()) && d < new Date()
+      }
+      setIsExpired(packageExpired)
+
+      if (packageExpired) {
+        setResults(claimResults.map((r) => ({ ...r, valid: false })))
+        setAllValid(false)
+      } else {
+        setResults(claimResults)
+        setAllValid(claimResults.length > 0 && claimResults.every((r) => r.valid))
+      }
+
       setPkgMeta({
         tokenId: pkg.tokenId,
         audience: pkg.audience,
         expiresAt: pkg.expiresAt,
       })
-
-      // Step 5: check if the package itself has expired (advisory, not a proof failure)
-      if (pkg.expiresAt) {
-        const d = new Date(pkg.expiresAt)
-        setIsExpired(!isNaN(d.getTime()) && d < new Date())
-      }
 
       setVerifyStatus("done")
     } catch (error) {
@@ -293,10 +301,9 @@ export function DisclosureVerifier() {
           {/* Expiry warning */}
           {isExpired && pkgMeta?.expiresAt && (
             <div className="rounded-xl border border-rose-500/25 bg-rose-500/08 px-4 py-3 text-sm text-rose-300">
-              <span className="font-medium">Disclosure package expired.</span>{" "}
-              The sharer marked this package as valid only until{" "}
-              <span className="font-mono">{formatExpiryDate(pkgMeta.expiresAt)}</span>. The Merkle proofs
-              are still verified below, but you should request a fresh disclosure.
+              <span className="font-medium">Disclosure package expired — all claims marked invalid.</span>{" "}
+              This package was valid only until{" "}
+              <span className="font-mono">{formatExpiryDate(pkgMeta.expiresAt)}</span>. Request a fresh disclosure from the credential holder.
             </div>
           )}
 

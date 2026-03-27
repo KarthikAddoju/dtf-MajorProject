@@ -181,6 +181,10 @@ router.post(
       ];
       await submission.save();
 
+      console.info(
+        `[Revocation Finalized] tokenId=${tokenId} txHash=${txHash} revoker=${req.user.address} reason="${normalizedReason}"`
+      );
+
       return sendSuccess(res, {
         submission: toSubmissionResponse(submission.toObject()),
       });

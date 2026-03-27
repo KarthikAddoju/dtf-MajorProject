@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useRef, useState } from "react"
+import { useCallback, useMemo, useRef, useState } from "react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import type { Institute } from "@/lib/types"
 
@@ -25,7 +25,9 @@ export function InstituteCombobox({
 }: InstituteComboboxProps) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState("")
+  const [focusedIndex, setFocusedIndex] = useState(-1)
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const listRef = useRef<HTMLDivElement | null>(null)
 
   const selected = useMemo(
     () => institutes.find((inst) => inst.id === value) ?? null,
@@ -43,6 +45,7 @@ export function InstituteCombobox({
   function handleSelect(id: string) {
     onChange(id)
     setQuery("")
+    setFocusedIndex(-1)
     setOpen(false)
     onBlur?.()
   }
@@ -51,12 +54,52 @@ export function InstituteCombobox({
     setOpen(nextOpen)
     if (nextOpen) {
       setQuery("")
-      // Focus search input after popover opens
+      setFocusedIndex(-1)
       requestAnimationFrame(() => {
         inputRef.current?.focus()
       })
     } else {
       onBlur?.()
+    }
+  }
+
+  const scrollFocusedIntoView = useCallback((index: number) => {
+    const list = listRef.current
+    if (!list) return
+    const items = list.querySelectorAll<HTMLElement>("[role='option']")
+    items[index]?.scrollIntoView({ block: "nearest" })
+  }, [])
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (!filtered.length) return
+
+    switch (e.key) {
+      case "ArrowDown": {
+        e.preventDefault()
+        const next = focusedIndex < filtered.length - 1 ? focusedIndex + 1 : 0
+        setFocusedIndex(next)
+        scrollFocusedIntoView(next)
+        break
+      }
+      case "ArrowUp": {
+        e.preventDefault()
+        const prev = focusedIndex > 0 ? focusedIndex - 1 : filtered.length - 1
+        setFocusedIndex(prev)
+        scrollFocusedIntoView(prev)
+        break
+      }
+      case "Enter": {
+        e.preventDefault()
+        if (focusedIndex >= 0 && focusedIndex < filtered.length) {
+          handleSelect(filtered[focusedIndex].id)
+        }
+        break
+      }
+      case "Escape": {
+        e.preventDefault()
+        setOpen(false)
+        break
+      }
     }
   }
 
@@ -89,6 +132,7 @@ export function InstituteCombobox({
             viewBox="0 0 24 24"
             strokeWidth={2}
             stroke="currentColor"
+            aria-hidden="true"
           >
             <path strokeLinecap="round" strokeLinejoin="round" d="m19 9-7 7-7-7" />
           </svg>
@@ -108,6 +152,7 @@ export function InstituteCombobox({
             viewBox="0 0 24 24"
             strokeWidth={2}
             stroke="currentColor"
+            aria-hidden="true"
           >
             <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
           </svg>
@@ -115,30 +160,46 @@ export function InstituteCombobox({
             ref={inputRef}
             type="text"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search institutes..."
+            onChange={(e) => {
+              setQuery(e.target.value)
+              setFocusedIndex(-1)
+            }}
+            onKeyDown={handleKeyDown}
+            placeholder="Type to filter..."
+            aria-label="Search institutes"
+            aria-activedescendant={
+              focusedIndex >= 0 && filtered[focusedIndex]
+                ? `combobox-option-${filtered[focusedIndex].id}`
+                : undefined
+            }
             className="brand-input w-full py-2 pl-9 pr-3 text-sm"
           />
         </div>
 
         {/* List */}
-        <div role="listbox" className="max-h-60 overflow-y-auto space-y-0.5">
+        <div ref={listRef} role="listbox" className="max-h-60 overflow-y-auto space-y-0.5">
           {filtered.length === 0 ? (
             <div className="px-3 py-4 text-center text-sm text-[#666666]">
               No institutes match
             </div>
           ) : (
-            filtered.map((inst) => {
+            filtered.map((inst, index) => {
               const isSelected = inst.id === value
+              const isFocused = index === focusedIndex
               return (
                 <button
                   key={inst.id}
+                  id={`combobox-option-${inst.id}`}
                   type="button"
                   role="option"
                   aria-selected={isSelected}
                   onClick={() => handleSelect(inst.id)}
                   className={`flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-left text-sm transition hover:bg-white/10 ${
-                    isSelected ? "bg-white/[0.06]" : ""
+                    isFocused
+                      ? "bg-white/10"
+                      : isSelected
+                        ? "bg-white/[0.06]"
+                        : ""
                   }`}
                 >
                   <span className="text-white">{inst.name}</span>

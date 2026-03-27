@@ -76,7 +76,7 @@ function buildSteps(submission: Submission): TimelineStep[] {
 
 function CheckIcon() {
   return (
-    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" aria-hidden="true">
       <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
     </svg>
   )
@@ -84,7 +84,7 @@ function CheckIcon() {
 
 function XIcon() {
   return (
-    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" aria-hidden="true">
       <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
     </svg>
   )
@@ -111,7 +111,7 @@ function StepNode({ step, index }: { step: TimelineStep; index: number }) {
     return (
       <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#4f7ef5]/40 bg-[#4f7ef5]/12 text-[#a5c0f8]">
         <span className="brand-status-dot absolute -right-1 -top-1" />
-        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" aria-hidden="true">
           <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
         </svg>
       </div>

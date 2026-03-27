@@ -13,7 +13,17 @@ const IV_LENGTH = 12;
 const AUTH_TAG_LENGTH = 16;
 
 function resolveEvidencePath(privateEvidenceRef: string) {
-  return path.join(runtimeConfig.privateEvidenceDir, privateEvidenceRef);
+  if (!/^[a-f0-9-]+\.bin$/.test(privateEvidenceRef)) {
+    throw new Error("Invalid evidence reference format");
+  }
+
+  const resolved = path.resolve(runtimeConfig.privateEvidenceDir, privateEvidenceRef);
+
+  if (!resolved.startsWith(path.resolve(runtimeConfig.privateEvidenceDir))) {
+    throw new Error("Path traversal detected");
+  }
+
+  return resolved;
 }
 
 async function ensureEvidenceDirectory() {

@@ -88,24 +88,6 @@ router.post("/verify", async (req, res) => {
   }
 
   const normalizedAddress = normalizeWalletAddress(address);
-  const pendingChallenge = await LoginChallengeModel.findOne({
-    address: normalizedAddress,
-    message,
-    consumedAt: null,
-  }).sort({ createdAt: -1 });
-
-  if (!pendingChallenge) {
-    return sendError(
-      res,
-      401,
-      "INVALID_CHALLENGE",
-      "Challenge not found or already used"
-    );
-  }
-
-  if (pendingChallenge.expiresAt.getTime() < Date.now()) {
-    return sendError(res, 401, "CHALLENGE_EXPIRED", "Challenge expired");
-  }
 
   let recoveredAddress: string;
 
@@ -119,8 +101,25 @@ router.post("/verify", async (req, res) => {
     return sendError(res, 401, "INVALID_SIGNATURE", "Invalid signature");
   }
 
-  pendingChallenge.consumedAt = new Date();
-  await pendingChallenge.save();
+  // Atomic: find the unconsumed challenge and mark it consumed in one operation
+  const pendingChallenge = await LoginChallengeModel.findOneAndUpdate(
+    { address: normalizedAddress, message, consumedAt: null },
+    { $set: { consumedAt: new Date() } },
+    { sort: { createdAt: -1 } }
+  );
+
+  if (!pendingChallenge) {
+    return sendError(
+      res,
+      401,
+      "INVALID_CHALLENGE",
+      "Challenge not found or already used"
+    );
+  }
+
+  if (pendingChallenge.expiresAt.getTime() < Date.now()) {
+    return sendError(res, 401, "CHALLENGE_EXPIRED", "Challenge expired");
+  }
 
   const role = await resolveUserRole(normalizedAddress);
   const token = jwt.sign(

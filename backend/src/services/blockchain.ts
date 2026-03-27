@@ -2,7 +2,9 @@ import { ethers } from "ethers";
 import { runtimeConfig } from "../config/runtime";
 
 export const provider = new ethers.JsonRpcProvider(
-  runtimeConfig.rpcUrl
+  runtimeConfig.rpcUrl,
+  undefined,
+  { staticNetwork: true }
 );
 
 export const poctAddress = runtimeConfig.poctAddress;

@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { isAddress } from "ethers";
 import { sendError, sendSuccess, handleServerError } from "../lib/api";
 import { InstituteModel } from "../models/Institute";
 import { CertificateSubmissionModel } from "../models/CertificateSubmission";
@@ -352,6 +353,14 @@ router.patch("/:id", authenticate, authorize("admin"), async (req, res) => {
     }
 
     if (Array.isArray(verifierAddresses)) {
+      if (verifierAddresses.some((addr) => !isAddress(addr))) {
+        return sendError(
+          res,
+          400,
+          "VALIDATION_ERROR",
+          "All verifier addresses must be valid Ethereum addresses"
+        );
+      }
       institute.verifierAddresses = uniqueWalletAddresses(verifierAddresses);
     }
 

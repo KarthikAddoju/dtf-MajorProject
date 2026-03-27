@@ -36,14 +36,14 @@ contract PoCT is ERC721Enumerable, Ownable {
     );
 
     modifier onlyController() {
-        require(msg.sender == mintController, "Not authorized");
+        require(msg.sender == mintController, "PoCT: caller is not the controller");
         _;
     }
 
     constructor() ERC721("ProofOfCourseToken", "PoCT") Ownable(msg.sender) {}
 
     function setMintController(address controller) external onlyOwner {
-        require(controller != address(0), "Invalid controller");
+        require(controller != address(0), "PoCT: controller is zero address");
         mintController = controller;
     }
 
@@ -55,11 +55,11 @@ contract PoCT is ERC721Enumerable, Ownable {
         address verifier,
         uint64 expiresAt
     ) external onlyController returns (uint256) {
-        require(student != address(0), "Invalid student");
-        require(bytes(publicProofCid).length > 0, "Missing proof CID");
-        require(claimsRoot != bytes32(0), "Missing claims root");
-        require(instituteHash != bytes32(0), "Missing institute hash");
-        require(verifier != address(0), "Invalid verifier");
+        require(student != address(0), "PoCT: student is zero address");
+        require(bytes(publicProofCid).length > 0, "PoCT: missing proof CID");
+        require(claimsRoot != bytes32(0), "PoCT: missing claims root");
+        require(instituteHash != bytes32(0), "PoCT: missing institute hash");
+        require(verifier != address(0), "PoCT: verifier is zero address");
 
         _tokenIds += 1;
         uint256 newTokenId = _tokenIds;
@@ -81,9 +81,9 @@ contract PoCT is ERC721Enumerable, Ownable {
     }
 
     function revoke(uint256 tokenId, bytes32 reasonHash) external onlyController {
-        require(_ownerOf(tokenId) != address(0), "Certificate not found");
+        require(_ownerOf(tokenId) != address(0), "PoCT: token does not exist");
         Certificate storage certificate = certificates[tokenId];
-        require(!certificate.revoked, "Credential already revoked");
+        require(!certificate.revoked, "PoCT: credential already revoked");
 
         certificate.revoked = true;
         certificate.revocationReasonHash = reasonHash;
@@ -92,12 +92,12 @@ contract PoCT is ERC721Enumerable, Ownable {
     }
 
     function instituteHashOf(uint256 tokenId) external view returns (bytes32) {
-        require(_ownerOf(tokenId) != address(0), "Certificate not found");
+        require(_ownerOf(tokenId) != address(0), "PoCT: token does not exist");
         return certificates[tokenId].instituteHash;
     }
 
     function credentialStatus(uint256 tokenId) public view returns (uint8) {
-        require(_ownerOf(tokenId) != address(0), "Certificate not found");
+        require(_ownerOf(tokenId) != address(0), "PoCT: token does not exist");
 
         Certificate storage certificate = certificates[tokenId];
 

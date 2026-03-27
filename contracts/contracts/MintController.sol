@@ -28,6 +28,8 @@ contract MintController is AccessControl {
     bytes32 public constant VERIFIER_ROLE = keccak256("VERIFIER_ROLE");
     bytes32 public constant REVOCATION_ROLE = keccak256("REVOCATION_ROLE");
 
+    uint256 public constant MAX_EDU_PER_MINT = 10_000 * 10 ** 18;
+
     IPoCT public poct;
     IEDUToken public eduToken;
 
@@ -57,9 +59,9 @@ contract MintController is AccessControl {
     );
 
     constructor(address admin, address poctAddress, address eduTokenAddress) {
-        require(admin != address(0), "Invalid admin");
-        require(poctAddress != address(0), "Invalid PoCT");
-        require(eduTokenAddress != address(0), "Invalid EDU");
+        require(admin != address(0), "MintController: admin is zero address");
+        require(poctAddress != address(0), "MintController: PoCT is zero address");
+        require(eduTokenAddress != address(0), "MintController: EDU is zero address");
 
         poct = IPoCT(poctAddress);
         eduToken = IEDUToken(eduTokenAddress);
@@ -75,8 +77,8 @@ contract MintController is AccessControl {
         address verifier,
         bool approved
     ) external onlyRole(VERIFIER_ADMIN_ROLE) {
-        require(instituteHash != bytes32(0), "Invalid institute hash");
-        require(verifier != address(0), "Invalid verifier");
+        require(instituteHash != bytes32(0), "MintController: institute hash is zero");
+        require(verifier != address(0), "MintController: verifier is zero address");
 
         if (approved) {
             _grantRole(VERIFIER_ROLE, verifier);
@@ -96,13 +98,14 @@ contract MintController is AccessControl {
         uint256 eduAmount,
         uint64 expiresAt
     ) external onlyRole(VERIFIER_ROLE) returns (uint256) {
-        require(student != address(0), "Invalid student");
-        require(bytes(publicProofCid).length > 0, "Missing proof CID");
-        require(claimsRoot != bytes32(0), "Missing claims root");
-        require(instituteHash != bytes32(0), "Missing institute hash");
+        require(student != address(0), "MintController: student is zero address");
+        require(bytes(publicProofCid).length > 0, "MintController: missing proof CID");
+        require(claimsRoot != bytes32(0), "MintController: missing claims root");
+        require(instituteHash != bytes32(0), "MintController: missing institute hash");
+        require(eduAmount <= MAX_EDU_PER_MINT, "MintController: EDU exceeds per-mint cap");
         require(
             instituteVerifiers[instituteHash][msg.sender],
-            "Verifier not authorized for institute"
+            "MintController: not authorized for institute"
         );
 
         uint256 tokenId = poct.mint(
@@ -140,7 +143,7 @@ contract MintController is AccessControl {
 
         require(
             instituteVerifiers[instituteHash][msg.sender],
-            "Revoker not authorized for institute"
+            "MintController: not authorized for institute"
         );
 
         poct.revoke(tokenId, reasonHash);

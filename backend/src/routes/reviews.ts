@@ -62,6 +62,15 @@ router.post(
         );
       }
 
+      if (typeof reviewNote === "string" && reviewNote.length > 1000) {
+        return sendError(
+          res,
+          400,
+          "VALIDATION_ERROR",
+          "Review note exceeds 1000 characters"
+        );
+      }
+
       const parsedEduAmount = parsePositiveNumber(eduAmount);
 
       if (!parsedEduAmount) {
@@ -81,6 +90,15 @@ router.post(
           400,
           "VALIDATION_ERROR",
           "expiresAt must be a valid ISO date or omitted"
+        );
+      }
+
+      if (parsedExpiryDate && parsedExpiryDate.getTime() < Date.now()) {
+        return sendError(
+          res,
+          400,
+          "VALIDATION_ERROR",
+          "Expiry date must be in the future"
         );
       }
 
@@ -332,6 +350,10 @@ router.post(
         }),
       ];
       await submission.save();
+
+      console.info(
+        `[Mint Finalized] tokenId=${mintedLog.tokenId} txHash=${txHash} verifier=${req.user.address}`
+      );
 
       return sendSuccess(res, {
         submission: toSubmissionResponse(submission.toObject()),

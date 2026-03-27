@@ -160,6 +160,10 @@ router.post(
       ];
       await submission.save();
 
+      console.info(
+        `[Submission Rejected] id=${id} reviewer=${req.user?.address ?? "unknown"}`
+      );
+
       return sendSuccess(res, {
         submission: toSubmissionResponse(submission.toObject()),
       });

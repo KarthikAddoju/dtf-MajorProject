@@ -40,11 +40,15 @@ contract PoCT is ERC721Enumerable, Ownable {
         _;
     }
 
+    event MintControllerUpdated(address indexed previousController, address indexed newController);
+
     constructor() ERC721("ProofOfCourseToken", "PoCT") Ownable(msg.sender) {}
 
     function setMintController(address controller) external onlyOwner {
         require(controller != address(0), "PoCT: controller is zero address");
+        address previous = mintController;
         mintController = controller;
+        emit MintControllerUpdated(previous, controller);
     }
 
     function mint(
@@ -60,6 +64,10 @@ contract PoCT is ERC721Enumerable, Ownable {
         require(claimsRoot != bytes32(0), "PoCT: missing claims root");
         require(instituteHash != bytes32(0), "PoCT: missing institute hash");
         require(verifier != address(0), "PoCT: verifier is zero address");
+        require(
+            expiresAt == 0 || expiresAt > uint64(block.timestamp),
+            "PoCT: expiresAt must be zero or in the future"
+        );
 
         _tokenIds += 1;
         uint256 newTokenId = _tokenIds;

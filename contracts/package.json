@@ -9,7 +9,7 @@
     "sync:env": "node scripts/sync-env.mjs",
     "deploy:sync": "npm run deploy:local && npm run sync:env",
     "test:mint": "HOME=$PWD npx hardhat run scripts/testMint.ts --network localhost",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "HOME=$PWD npx hardhat test"
   },
   "keywords": [],
   "author": "",

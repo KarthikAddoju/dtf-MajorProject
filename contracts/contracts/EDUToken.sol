@@ -10,6 +10,8 @@ contract EDUToken is ERC20, Ownable {
 
     address public mintController;
 
+    event MintControllerUpdated(address indexed previousController, address indexed newController);
+
     modifier onlyController() {
         require(msg.sender == mintController, "EDUToken: caller is not the controller");
         _;
@@ -22,7 +24,9 @@ contract EDUToken is ERC20, Ownable {
 
     function setMintController(address _controller) external onlyOwner {
         require(_controller != address(0), "EDUToken: controller is zero address");
+        address previous = mintController;
         mintController = _controller;
+        emit MintControllerUpdated(previous, _controller);
     }
 
     function mint(address to, uint256 amount) external onlyController {

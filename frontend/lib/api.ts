@@ -475,6 +475,16 @@ export async function uploadCertificate(
       )
     })
 
+    request.addEventListener("timeout", () => {
+      reject(
+        new ApiError("Upload timed out — check your connection and try again", {
+          status: 0,
+          code: "UPLOAD_TIMEOUT",
+        })
+      )
+    })
+
+    request.timeout = 120_000
     request.send(formData)
   })
 }

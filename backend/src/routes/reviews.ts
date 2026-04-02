@@ -248,6 +248,15 @@ router.post(
         return sendError(res, 403, "FORBIDDEN", "Forbidden");
       }
 
+      if (submission.status === "minted") {
+        return sendError(
+          res,
+          409,
+          "ALREADY_MINTED",
+          "This submission has already been minted"
+        );
+      }
+
       if (!submission.publicProofCid || !submission.claimsRoot) {
         return sendError(
           res,
@@ -321,42 +330,59 @@ router.post(
         Number(block?.timestamp ?? Math.floor(Date.now() / 1000)) * 1000
       );
 
-      submission.status = "minted";
-      submission.tokenId = mintedLog.tokenId;
-      submission.txHash = txHash;
-      submission.verifierAddress = req.user.address;
-      submission.reviewedAt = mintedAt;
-      submission.mintedAt = mintedAt;
-      submission.verificationStatus = resolveSubmissionVerificationStatus({
+      const newVerificationStatus = resolveSubmissionVerificationStatus({
         status: "minted",
         verificationStatus: submission.verificationStatus,
         expiresAt: submission.expiresAt ?? undefined,
         revokedAt: submission.revokedAt ?? undefined,
       }) as "active" | "expired" | "revoked";
-      submission.auditTrail = [
-        ...(submission.auditTrail ?? []),
-        createAuditTrailEvent({
-          type: "submission_minted",
-          title: "Credential minted on-chain",
-          description:
-            "Reviewer approved the submission and minted the PoCT credential with wallet-signed confirmation.",
-          actorAddress: req.user.address,
-          metadata: {
+
+      const atomicResult = await CertificateSubmissionModel.findOneAndUpdate(
+        { _id: submissionId, status: { $ne: "minted" } },
+        {
+          $set: {
+            status: "minted",
             tokenId: mintedLog.tokenId,
             txHash,
-            eduAmount: submission.eduAmount ?? 0,
-            verificationStatus: submission.verificationStatus,
+            verifierAddress: req.user.address,
+            reviewedAt: mintedAt,
+            mintedAt: mintedAt,
+            verificationStatus: newVerificationStatus,
           },
-        }),
-      ];
-      await submission.save();
+          $push: {
+            auditTrail: createAuditTrailEvent({
+              type: "submission_minted",
+              title: "Credential minted on-chain",
+              description:
+                "Reviewer approved the submission and minted the PoCT credential with wallet-signed confirmation.",
+              actorAddress: req.user.address,
+              metadata: {
+                tokenId: mintedLog.tokenId,
+                txHash,
+                eduAmount: submission.eduAmount ?? 0,
+                verificationStatus: newVerificationStatus,
+              },
+            }),
+          },
+        },
+        { new: true }
+      );
+
+      if (!atomicResult) {
+        return sendError(
+          res,
+          409,
+          "ALREADY_MINTED",
+          "This submission was minted by another request"
+        );
+      }
 
       console.info(
         `[Mint Finalized] tokenId=${mintedLog.tokenId} txHash=${txHash} verifier=${req.user.address}`
       );
 
       return sendSuccess(res, {
-        submission: toSubmissionResponse(submission.toObject()),
+        submission: toSubmissionResponse(atomicResult.toObject()),
         txHash,
         tokenId: mintedLog.tokenId,
       });

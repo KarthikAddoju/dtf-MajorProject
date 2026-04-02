@@ -65,22 +65,27 @@ export async function analyseCertificate(
 
   const ai = new GoogleGenAI({ apiKey: runtimeConfig.geminiApiKey });
 
-  const response = await ai.models.generateContent({
-    model: "gemini-2.0-flash",
-    contents: [
-      { text: PROMPT },
-      {
-        inlineData: {
-          mimeType,
-          data: buffer.toString("base64"),
+  const response = await Promise.race([
+    ai.models.generateContent({
+      model: "gemini-2.0-flash",
+      contents: [
+        { text: PROMPT },
+        {
+          inlineData: {
+            mimeType,
+            data: buffer.toString("base64"),
+          },
         },
+      ],
+      config: {
+        responseMimeType: "application/json",
+        responseSchema,
       },
-    ],
-    config: {
-      responseMimeType: "application/json",
-      responseSchema,
-    },
-  });
+    }),
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("Gemini analysis timed out after 45 seconds")), 45_000)
+    ),
+  ]);
 
   const text = response.text;
 

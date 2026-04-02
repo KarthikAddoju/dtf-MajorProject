@@ -1,5 +1,6 @@
 import express from "express";
 import fs from "node:fs/promises";
+import path from "node:path";
 import multer from "multer";
 import type { Request } from "express";
 import { authenticate, type AuthRequest } from "../middleware/authMiddleware";
@@ -103,6 +104,19 @@ router.post("/", authenticate, async (req: AuthRequest, res) => {
       );
     }
 
+    const MAX_COURSE_NAME_LENGTH = 500;
+    if (
+      isNonEmptyString(courseName) &&
+      courseName.trim().length > MAX_COURSE_NAME_LENGTH
+    ) {
+      return sendError(
+        res,
+        400,
+        "VALIDATION_ERROR",
+        `Credential title must be ${MAX_COURSE_NAME_LENGTH} characters or fewer`
+      );
+    }
+
     if (!isNonEmptyString(courseName) || !isNonEmptyString(instituteId)) {
       return sendError(
         res,
@@ -183,7 +197,7 @@ router.post("/", authenticate, async (req: AuthRequest, res) => {
       instituteHash,
       evidenceHash,
       privateEvidenceRef,
-      fileName: req.file.originalname,
+      fileName: path.basename(req.file.originalname).replace(/[^\w.\-() ]/g, "_"),
       mimeType: req.file.mimetype,
       status: "pending_review",
       auditTrail: [
@@ -196,7 +210,7 @@ router.post("/", authenticate, async (req: AuthRequest, res) => {
           metadata: {
             evidenceHash,
             credentialType: normalizedCredentialType,
-            fileName: req.file.originalname,
+            fileName: path.basename(req.file.originalname),
             instituteName: institute.name,
           },
         }),

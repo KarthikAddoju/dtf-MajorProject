@@ -375,6 +375,8 @@ export default function UploadPage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
+    if (isSubmitting) return
+
     if (!token) {
       setSubmissionStatus({
         tone: "warning",

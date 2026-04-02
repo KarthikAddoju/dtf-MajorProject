@@ -47,6 +47,8 @@ const disclosureRecordSchema = new Schema(
   }
 );
 
+disclosureRecordSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+
 export type DisclosureRecord = InferSchemaType<typeof disclosureRecordSchema>;
 export type DisclosureRecordDocument = HydratedDocument<DisclosureRecord>;
 

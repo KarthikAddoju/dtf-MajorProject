@@ -38,6 +38,9 @@ export function verifyMerkleProof(
   value: unknown,
   proof: string[]
 ): boolean {
+  if (!Array.isArray(proof) || proof.length === 0) return false
+  if (!root || typeof root !== "string") return false
+
   const startingHash = hashLeaf(key, value)
   const computedHash = proof.reduce(
     (currentHash, siblingHash) => hashPair(currentHash, siblingHash),

@@ -105,7 +105,11 @@ export function DisclosureVerifier() {
     setPkgMeta(null)
 
     try {
-      // Step 1: parse JSON
+      // Step 1: parse JSON (size guard prevents DoS from huge payloads)
+      if (rawInput.length > 500_000) {
+        throw new Error("Disclosure package is too large to process.")
+      }
+
       let parsed: unknown
       try {
         parsed = JSON.parse(rawInput.trim())

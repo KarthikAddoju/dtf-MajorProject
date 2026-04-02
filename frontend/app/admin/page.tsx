@@ -87,6 +87,34 @@ function getEduAmountError(value: string) {
   return undefined
 }
 
+function translateContractError(raw: string): string {
+  if (/user rejected|user denied/i.test(raw)) {
+    return "Transaction was rejected in MetaMask."
+  }
+  if (/insufficient funds/i.test(raw)) {
+    return "Your wallet has insufficient ETH to cover the gas fee."
+  }
+  if (/not authorized for institute/i.test(raw)) {
+    return "Your wallet is not registered as a verifier for this institute."
+  }
+  if (/EDU exceeds per-mint cap/i.test(raw)) {
+    return "EDU amount exceeds the per-mint maximum. Lower the reward amount."
+  }
+  if (/supply cap exceeded/i.test(raw)) {
+    return "EDU token supply cap has been reached. Minting is unavailable."
+  }
+  if (/expiresAt must be zero or in the future/i.test(raw)) {
+    return "Expiry date must be set in the future, or left blank."
+  }
+  if (/nonce too low|replacement fee too low/i.test(raw)) {
+    return "Transaction nonce conflict. Reset MetaMask activity and try again."
+  }
+  if (/network changed|chain changed/i.test(raw)) {
+    return "Network changed during transaction. Switch back to the DACS network and retry."
+  }
+  return raw
+}
+
 function toDateTimeLocalValue(value: string | null) {
   if (!value) {
     return ""
@@ -421,8 +449,8 @@ export default function AdminPage() {
       })
       setRefreshNonce((value) => value + 1)
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Minting failed unexpectedly"
+      const raw = error instanceof Error ? error.message : String(error)
+      const message = translateContractError(raw)
       setConsoleStatus({
         tone: "error",
         title: "Mint failed",

@@ -29,6 +29,7 @@ export async function uploadToIPFS(filePath: string) {
         ...data.getHeaders(),
       },
       maxBodyLength: Infinity,
+      timeout: 60_000,
     }
   );
 
@@ -53,6 +54,7 @@ export async function uploadJsonToIPFS(payload: Record<string, unknown>) {
         "Content-Type": "application/json",
       },
       maxBodyLength: Infinity,
+      timeout: 30_000,
     }
   );
 
@@ -72,6 +74,7 @@ export async function fetchJsonFromIPFS<T>(cid: string) {
         headers: {
           Accept: "application/json",
         },
+        signal: AbortSignal.timeout(15_000),
       });
 
       if (!response.ok) {

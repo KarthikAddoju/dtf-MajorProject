@@ -13,6 +13,12 @@ export const VERIFICATION_STATUSES = [
   "revoked",
 ] as const;
 
+export const MINT_STATES = [
+  "unprepared",
+  "prepared",
+  "minted",
+] as const;
+
 export const CREDENTIAL_TYPES = [
   "course",
   "workshop",
@@ -58,6 +64,57 @@ const auditTrailEventSchema = new Schema(
   },
   {
     _id: true,
+    id: false,
+  }
+);
+
+const mintDraftSchema = new Schema(
+  {
+    publicProofCid: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    publicProofPayload: {
+      type: Schema.Types.Mixed,
+      required: true,
+    },
+    claimsRoot: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    claimSet: {
+      type: Schema.Types.Mixed,
+      required: true,
+    },
+    eduAmount: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+    eduAmountWei: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    expiresAt: {
+      type: Date,
+      default: null,
+    },
+    preparedBy: {
+      type: String,
+      required: true,
+      trim: true,
+      lowercase: true,
+    },
+    preparedAt: {
+      type: Date,
+      required: true,
+    },
+  },
+  {
+    _id: false,
     id: false,
   }
 );
@@ -144,6 +201,16 @@ const certificateSubmissionSchema = new Schema(
       default: "pending_review",
       index: true,
     },
+    mintState: {
+      type: String,
+      enum: MINT_STATES,
+      default: "unprepared",
+      index: true,
+    },
+    mintDraft: {
+      type: mintDraftSchema,
+      default: null,
+    },
     verificationStatus: {
       type: String,
       enum: VERIFICATION_STATUSES,
@@ -215,6 +282,10 @@ export type CertificateSubmissionDocument =
   HydratedDocument<CertificateSubmission>;
 
 // Compound indexes for common query patterns
+certificateSubmissionSchema.index(
+  { studentAddress: 1, evidenceHash: 1 },
+  { unique: true }
+);
 certificateSubmissionSchema.index({ studentAddress: 1, status: 1 });
 certificateSubmissionSchema.index({ instituteId: 1, status: 1 });
 

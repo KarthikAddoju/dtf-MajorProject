@@ -6,6 +6,7 @@ import {
 } from "../models/CertificateSubmission";
 import { toAuditTrailResponse } from "./audit";
 import { buildIpfsGatewayUrl } from "../services/ipfs";
+import { getSubmissionMintDraft } from "./mintWorkflow";
 
 type VerificationStatus = (typeof VERIFICATION_STATUSES)[number];
 
@@ -19,12 +20,26 @@ interface SubmissionResponseInput {
   instituteHash: string;
   evidenceHash: string;
   publicProofCid?: string;
+  publicProofPayload?: Record<string, unknown>;
   claimsRoot?: string;
+  claimSet?: Record<string, unknown>;
   fileName: string;
   mimeType: string;
   status: (typeof CERTIFICATE_STATUSES)[number];
+  mintDraft?: {
+    publicProofCid: string;
+    publicProofPayload: Record<string, unknown>;
+    claimsRoot: string;
+    claimSet: Record<string, unknown>;
+    eduAmount: number;
+    eduAmountWei: string;
+    expiresAt?: Date;
+    preparedBy?: string;
+    preparedAt?: Date;
+  } | null;
   verificationStatus?: VerificationStatus;
   eduAmount?: number;
+  eduAmountWei?: string;
   tokenId?: string;
   txHash?: string;
   verifierAddress?: string;
@@ -80,7 +95,8 @@ export function toSubmissionResponse(submission: SubmissionResponseInput) {
     typeof submission._id === "object" && submission._id !== null
       ? String((submission._id as Types.ObjectId).toString())
       : String(submission._id);
-  const publicProofCid = submission.publicProofCid ?? null;
+  const mintDraft = getSubmissionMintDraft(submission);
+  const publicProofCid = submission.publicProofCid ?? mintDraft?.publicProofCid ?? null;
   const publicProofUrl = publicProofCid ? buildIpfsGatewayUrl(publicProofCid) : null;
   const verificationStatus = resolveSubmissionVerificationStatus(submission);
 
@@ -96,17 +112,18 @@ export function toSubmissionResponse(submission: SubmissionResponseInput) {
     evidenceUrl: buildEvidenceUrl(id),
     publicProofCid,
     publicProofUrl,
-    claimsRoot: submission.claimsRoot ?? null,
+    claimsRoot: submission.claimsRoot ?? mintDraft?.claimsRoot ?? null,
     fileName: submission.fileName,
     mimeType: submission.mimeType,
     status: submission.status,
     verificationStatus,
-    eduAmount: submission.eduAmount ?? null,
+    eduAmount: submission.eduAmount ?? mintDraft?.eduAmount ?? null,
     tokenId: submission.tokenId ?? null,
     txHash: submission.txHash ?? null,
     verifierAddress: submission.verifierAddress ?? null,
     reviewNote: submission.reviewNote ?? null,
-    expiresAt: submission.expiresAt?.toISOString() ?? null,
+    expiresAt:
+      submission.expiresAt?.toISOString() ?? mintDraft?.expiresAt?.toISOString() ?? null,
     revokedAt: submission.revokedAt?.toISOString() ?? null,
     revocationReason: submission.revocationReason ?? null,
     uploadedAt: submission.uploadedAt.toISOString(),

@@ -38,6 +38,10 @@ function formatVerificationStatusLabel(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1)
 }
 
+function isValidTokenId(value: string) {
+  return /^\d+$/.test(value)
+}
+
 function downloadTextFile(filename: string, contents: string, type: string) {
   const blob = new Blob([contents], { type })
   const url = URL.createObjectURL(blob)
@@ -71,6 +75,14 @@ function VerifyPageContent() {
       setHasAttemptedLookup(false)
       setErrorMessage(null)
       setErrorCode(null)
+      return
+    }
+
+    if (!isValidTokenId(tokenIdFromQuery)) {
+      setRecord(null)
+      setHasAttemptedLookup(true)
+      setErrorCode("VALIDATION_ERROR")
+      setErrorMessage("Token IDs must contain digits only.")
       return
     }
 
@@ -150,7 +162,18 @@ function VerifyPageContent() {
     const trimmedTokenId = searchTokenId.trim()
 
     if (!trimmedTokenId) {
+      setHasAttemptedLookup(true)
+      setRecord(null)
+      setErrorCode("VALIDATION_ERROR")
       setErrorMessage("Enter a token ID to verify a credential.")
+      return
+    }
+
+    if (!isValidTokenId(trimmedTokenId)) {
+      setHasAttemptedLookup(true)
+      setRecord(null)
+      setErrorMessage("Token IDs must contain digits only.")
+      setErrorCode("VALIDATION_ERROR")
       return
     }
 

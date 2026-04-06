@@ -59,6 +59,15 @@ function runUploadMiddleware(req: Request, res: express.Response) {
   });
 }
 
+function isMongoDuplicateKeyError(error: unknown): error is { code: number } {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === 11000
+  );
+}
+
 router.post("/", authenticate, async (req: AuthRequest, res) => {
   try {
     await runUploadMiddleware(req, res);
@@ -225,6 +234,15 @@ router.post("/", authenticate, async (req: AuthRequest, res) => {
       201
     );
   } catch (error) {
+    if (isMongoDuplicateKeyError(error)) {
+      return sendError(
+        res,
+        409,
+        "DUPLICATE_EVIDENCE",
+        "This evidence file has already been submitted from the same wallet"
+      );
+    }
+
     return handleServerError(res, error, "Evidence upload failed");
   } finally {
     if (req.file?.path) {

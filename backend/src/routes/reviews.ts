@@ -8,6 +8,7 @@ import { InstituteModel } from "../models/Institute";
 import { buildPreparedPublicProof } from "../services/publicProof";
 import { uploadJsonToIPFS } from "../services/ipfs";
 import {
+  mintControllerAbi,
   mintControllerAddress,
   parseDualMintReceipt,
   provider,
@@ -15,8 +16,14 @@ import {
 import { createAuditTrailEvent } from "../lib/audit";
 import { assertInstituteReviewerAccess } from "../lib/reviewers";
 import { toSubmissionResponse, resolveSubmissionVerificationStatus } from "../lib/submissionResponses";
+import {
+  getSubmissionMintDraft,
+  resolveSubmissionMintState,
+  type MintDraftSnapshot,
+} from "../lib/mintWorkflow";
 
 const router = Router();
+const mintControllerInterface = new ethers.Interface(mintControllerAbi);
 
 function parseExpiryDate(value: unknown) {
   if (value === undefined || value === null || value === "") {
@@ -34,6 +41,25 @@ function parseExpiryDate(value: unknown) {
   }
 
   return parsedDate;
+}
+
+function buildMintPayload(
+  submission: {
+    studentAddress: string;
+    instituteHash: string;
+  },
+  mintDraft: MintDraftSnapshot
+) {
+  return {
+    studentAddress: submission.studentAddress,
+    publicProofCid: mintDraft.publicProofCid,
+    claimsRoot: mintDraft.claimsRoot,
+    instituteHash: submission.instituteHash,
+    eduAmountWei: mintDraft.eduAmountWei,
+    expiresAt: mintDraft.expiresAt
+      ? Math.floor(mintDraft.expiresAt.getTime() / 1000)
+      : 0,
+  };
 }
 
 router.post(
@@ -122,13 +148,29 @@ router.post(
         );
       }
 
+      const authenticatedUser = req.user;
+
+      if (!authenticatedUser) {
+        return sendError(res, 401, "UNAUTHORIZED", "You must be signed in");
+      }
+
       const canReview = await assertInstituteReviewerAccess(
-        req.user,
+        authenticatedUser,
         submission.instituteId
       );
 
       if (!canReview) {
         return sendError(res, 403, "FORBIDDEN", "Forbidden");
+      }
+
+      const existingMintState = resolveSubmissionMintState(submission);
+      const existingMintDraft = getSubmissionMintDraft(submission);
+
+      if (existingMintState === "prepared" && existingMintDraft) {
+        return sendSuccess(res, {
+          submission: toSubmissionResponse(submission.toObject()),
+          mintPayload: buildMintPayload(submission, existingMintDraft),
+        });
       }
 
       const institute = await InstituteModel.findById(submission.instituteId)
@@ -159,48 +201,95 @@ router.post(
         preparedProof.publicProofPayload
       );
       const eduAmountWei = ethers.parseUnits(parsedEduAmount.toString(), 18);
-
-      submission.eduAmount = parsedEduAmount;
-      submission.eduAmountWei = eduAmountWei.toString();
-      submission.reviewNote =
+      const reviewNoteValue =
         typeof reviewNote === "string" && reviewNote.trim().length > 0
           ? reviewNote.trim()
           : submission.reviewNote;
-      submission.publicProofCid = publicProofCid;
-      submission.publicProofPayload = preparedProof.publicProofPayload;
-      submission.claimsRoot = preparedProof.claimsRoot;
-      submission.claimSet = preparedProof.claimSet;
-      submission.expiresAt = parsedExpiryDate ?? undefined;
-      submission.auditTrail = [
-        ...(submission.auditTrail ?? []),
-        createAuditTrailEvent({
-          type: "mint_prepared",
-          title: "Mint payload prepared",
-          description:
-            "Reviewer prepared the public proof JSON and Merkle claims root for wallet-based minting.",
-          actorAddress: req.user?.address,
-          metadata: {
-            publicProofCid,
-            claimsRoot: preparedProof.claimsRoot,
-            eduAmount: parsedEduAmount,
-            expiresAt: parsedExpiryDate?.toISOString() ?? null,
+      const preparedSubmission = await CertificateSubmissionModel.findOneAndUpdate(
+        {
+          _id: submissionId,
+          status: "pending_review",
+          $or: [
+            { mintState: "unprepared" },
+            {
+              mintState: { $exists: false },
+              publicProofCid: null,
+              claimsRoot: null,
+            },
+          ],
+        },
+        {
+          $set: {
+            mintState: "prepared",
+            mintDraft: {
+              publicProofCid,
+              publicProofPayload: preparedProof.publicProofPayload,
+              claimsRoot: preparedProof.claimsRoot,
+              claimSet: preparedProof.claimSet,
+              eduAmount: parsedEduAmount,
+              eduAmountWei: eduAmountWei.toString(),
+              expiresAt: parsedExpiryDate ?? null,
+              preparedBy: authenticatedUser.address,
+              preparedAt: new Date(),
+            },
+            reviewNote: reviewNoteValue,
           },
-        }),
-      ];
-      await submission.save();
+          $push: {
+            auditTrail: createAuditTrailEvent({
+              type: "mint_prepared",
+              title: "Mint payload prepared",
+              description:
+                "Reviewer prepared the public proof JSON and Merkle claims root for wallet-based minting.",
+              actorAddress: req.user?.address,
+              metadata: {
+                publicProofCid,
+                claimsRoot: preparedProof.claimsRoot,
+                eduAmount: parsedEduAmount,
+                expiresAt: parsedExpiryDate?.toISOString() ?? null,
+              },
+            }),
+          },
+        },
+        { new: true }
+      );
+
+      const resolvedPreparedSubmission =
+        preparedSubmission ??
+        (await CertificateSubmissionModel.findById(submissionId));
+
+      if (!resolvedPreparedSubmission) {
+        return sendError(
+          res,
+          404,
+          "SUBMISSION_NOT_FOUND",
+          "Submission not found"
+        );
+      }
+
+      const resolvedMintState = resolveSubmissionMintState(resolvedPreparedSubmission);
+      const resolvedMintDraft = getSubmissionMintDraft(resolvedPreparedSubmission);
+
+      if (resolvedMintState !== "prepared" || !resolvedMintDraft) {
+        if (resolvedMintState === "minted") {
+          return sendError(
+            res,
+            409,
+            "ALREADY_MINTED",
+            "This submission has already been minted"
+          );
+        }
+
+        return sendError(
+          res,
+          409,
+          "PREPARE_CONFLICT",
+          "Mint preparation could not be persisted"
+        );
+      }
 
       return sendSuccess(res, {
-        submission: toSubmissionResponse(submission.toObject()),
-        mintPayload: {
-          studentAddress: submission.studentAddress,
-          publicProofCid,
-          claimsRoot: preparedProof.claimsRoot,
-          instituteHash: submission.instituteHash,
-          eduAmountWei: eduAmountWei.toString(),
-          expiresAt: parsedExpiryDate
-            ? Math.floor(parsedExpiryDate.getTime() / 1000)
-            : 0,
-        },
+        submission: toSubmissionResponse(resolvedPreparedSubmission.toObject()),
+        mintPayload: buildMintPayload(resolvedPreparedSubmission, resolvedMintDraft),
       });
     } catch (error) {
       return handleServerError(res, error, "Could not prepare the mint payload");
@@ -257,7 +346,19 @@ router.post(
         );
       }
 
-      if (!submission.publicProofCid || !submission.claimsRoot) {
+      if (submission.status !== "pending_review") {
+        return sendError(
+          res,
+          409,
+          "SUBMISSION_NOT_MINTABLE",
+          "Only pending submissions can be minted"
+        );
+      }
+
+      const mintState = resolveSubmissionMintState(submission);
+      const mintDraft = getSubmissionMintDraft(submission);
+
+      if (mintState !== "prepared" || !mintDraft) {
         return sendError(
           res,
           409,
@@ -280,12 +381,35 @@ router.post(
         );
       }
 
+      if (receipt.status !== 1) {
+        return sendError(
+          res,
+          400,
+          "TX_FAILED",
+          "Transaction reverted"
+        );
+      }
+
       if ((transaction.to ?? "").toLowerCase() !== mintControllerAddress.toLowerCase()) {
         return sendError(
           res,
           400,
           "INVALID_TRANSACTION",
           "Transaction was not sent to the mint controller"
+        );
+      }
+
+      const parsedTransaction = mintControllerInterface.parseTransaction({
+        data: transaction.data,
+        value: transaction.value ?? 0n,
+      });
+
+      if (!parsedTransaction || parsedTransaction.name !== "dualMint") {
+        return sendError(
+          res,
+          400,
+          "INVALID_TRANSACTION",
+          "Transaction did not call the expected mint function"
         );
       }
 
@@ -301,6 +425,26 @@ router.post(
         );
       }
 
+      const expectedMintPayload = buildMintPayload(submission, mintDraft);
+      const parsedArgs = parsedTransaction.args;
+
+      if (
+        parsedArgs.student.toLowerCase() !== expectedMintPayload.studentAddress.toLowerCase() ||
+        parsedArgs.publicProofCid !== expectedMintPayload.publicProofCid ||
+        parsedArgs.claimsRoot.toLowerCase() !== expectedMintPayload.claimsRoot.toLowerCase() ||
+        parsedArgs.instituteHash.toLowerCase() !==
+          expectedMintPayload.instituteHash.toLowerCase() ||
+        parsedArgs.eduAmount.toString() !== expectedMintPayload.eduAmountWei ||
+        Number(parsedArgs.expiresAt) !== expectedMintPayload.expiresAt
+      ) {
+        return sendError(
+          res,
+          400,
+          "MINT_PAYLOAD_MISMATCH",
+          "Transaction input did not match the prepared mint payload"
+        );
+      }
+
       const mintedLog = parseDualMintReceipt(receipt);
 
       if (!mintedLog) {
@@ -313,8 +457,8 @@ router.post(
       }
 
       if (
-        mintedLog.publicProofCid !== submission.publicProofCid ||
-        mintedLog.claimsRoot.toLowerCase() !== submission.claimsRoot.toLowerCase() ||
+        mintedLog.publicProofCid !== mintDraft.publicProofCid ||
+        mintedLog.claimsRoot.toLowerCase() !== mintDraft.claimsRoot.toLowerCase() ||
         mintedLog.instituteHash.toLowerCase() !== submission.instituteHash.toLowerCase()
       ) {
         return sendError(
@@ -338,16 +482,38 @@ router.post(
       }) as "active" | "expired" | "revoked";
 
       const atomicResult = await CertificateSubmissionModel.findOneAndUpdate(
-        { _id: submissionId, status: { $ne: "minted" } },
+        {
+          _id: submissionId,
+          status: "pending_review",
+          $or: [
+            { mintState: "prepared" },
+            {
+              mintState: { $exists: false },
+              publicProofCid: { $ne: null },
+              claimsRoot: { $ne: null },
+            },
+          ],
+        },
         {
           $set: {
             status: "minted",
+            mintState: "minted",
+            eduAmount: mintDraft.eduAmount,
+            eduAmountWei: mintDraft.eduAmountWei,
+            publicProofCid: mintDraft.publicProofCid,
+            publicProofPayload: mintDraft.publicProofPayload,
+            claimsRoot: mintDraft.claimsRoot,
+            claimSet: mintDraft.claimSet,
+            expiresAt: mintDraft.expiresAt ?? undefined,
             tokenId: mintedLog.tokenId,
             txHash,
             verifierAddress: req.user.address,
             reviewedAt: mintedAt,
             mintedAt: mintedAt,
             verificationStatus: newVerificationStatus,
+          },
+          $unset: {
+            mintDraft: 1,
           },
           $push: {
             auditTrail: createAuditTrailEvent({

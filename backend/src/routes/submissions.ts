@@ -142,6 +142,8 @@ router.post(
       }
 
       submission.status = "rejected";
+      submission.mintState = "unprepared";
+      submission.mintDraft = null;
       submission.reviewNote = reviewNote?.trim() || undefined;
       submission.reviewedAt = new Date();
       submission.auditTrail = [

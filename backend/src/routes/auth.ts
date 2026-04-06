@@ -1,7 +1,7 @@
-import { randomBytes } from "node:crypto";
 import { Router } from "express";
-import { isAddress, verifyMessage } from "ethers";
+import { isAddress } from "ethers";
 import jwt from "jsonwebtoken";
+import { generateNonce, SiweMessage } from "siwe";
 import { runtimeConfig, isAdminWallet, isBootstrapVerifierWallet } from "../config/runtime";
 import { authenticate, type AuthRequest } from "../middleware/authMiddleware";
 import { sendError, sendSuccess } from "../lib/api";
@@ -11,6 +11,9 @@ import { normalizeWalletAddress } from "../lib/institutes";
 
 const router = Router();
 const CHALLENGE_TTL_MS = 5 * 60 * 1000;
+const expectedFrontendUrl = new URL(runtimeConfig.frontendOrigin);
+const expectedSiweDomain = expectedFrontendUrl.host;
+const expectedSiweOrigin = expectedFrontendUrl.origin;
 
 async function resolveUserRole(address: string) {
   const normalizedAddress = normalizeWalletAddress(address);
@@ -45,10 +48,7 @@ router.post("/challenge", async (req, res) => {
   }
 
   const normalizedAddress = normalizeWalletAddress(address);
-  const message = [
-    `Login to DACS with wallet: ${normalizedAddress}`,
-    `Nonce: ${randomBytes(16).toString("hex")}`,
-  ].join("\n");
+  const nonce = generateNonce();
   const expiresAt = new Date(Date.now() + CHALLENGE_TTL_MS);
 
   await LoginChallengeModel.deleteMany({
@@ -58,7 +58,7 @@ router.post("/challenge", async (req, res) => {
 
   await LoginChallengeModel.create({
     address: normalizedAddress,
-    message,
+    nonce,
     ipAddress: req.ip,
     userAgent:
       typeof req.headers["user-agent"] === "string"
@@ -67,7 +67,7 @@ router.post("/challenge", async (req, res) => {
     expiresAt,
   });
 
-  return sendSuccess(res, { message, expiresAt: expiresAt.getTime() });
+  return sendSuccess(res, { nonce, expiresAt: expiresAt.getTime() });
 });
 
 router.post("/verify", async (req, res) => {
@@ -89,50 +89,74 @@ router.post("/verify", async (req, res) => {
 
   const normalizedAddress = normalizeWalletAddress(address);
 
-  let recoveredAddress: string;
+  let siweMessage;
+  try {
+    siweMessage = new SiweMessage(message);
+  } catch (error) {
+    return sendError(res, 400, "INVALID_MESSAGE", "Invalid SIWE message format");
+  }
 
   try {
-    recoveredAddress = normalizeWalletAddress(verifyMessage(message, signature));
-  } catch {
-    return sendError(res, 401, "INVALID_SIGNATURE", "Invalid signature");
-  }
+    const { data: fields } = await siweMessage.verify({ signature });
 
-  if (recoveredAddress !== normalizedAddress) {
-    return sendError(res, 401, "INVALID_SIGNATURE", "Invalid signature");
-  }
+    if (normalizeWalletAddress(fields.address) !== normalizedAddress) {
+      return sendError(res, 401, "INVALID_SIGNATURE", "Message address does not match requested address");
+    }
 
-  // Atomic: find the unconsumed challenge and mark it consumed in one operation
-  const pendingChallenge = await LoginChallengeModel.findOneAndUpdate(
-    { address: normalizedAddress, message, consumedAt: null },
-    { $set: { consumedAt: new Date() } },
-    { sort: { createdAt: -1 } }
-  );
+    if (fields.domain !== expectedSiweDomain) {
+      return sendError(
+        res,
+        401,
+        "INVALID_MESSAGE",
+        "SIWE domain did not match the configured frontend host"
+      );
+    }
 
-  if (!pendingChallenge) {
-    return sendError(
-      res,
-      401,
-      "INVALID_CHALLENGE",
-      "Challenge not found or already used"
+    let normalizedUriOrigin: string;
+    try {
+      normalizedUriOrigin = new URL(fields.uri).origin;
+    } catch {
+      return sendError(res, 401, "INVALID_MESSAGE", "SIWE URI was not a valid origin");
+    }
+
+    if (normalizedUriOrigin !== expectedSiweOrigin) {
+      return sendError(
+        res,
+        401,
+        "INVALID_MESSAGE",
+        "SIWE URI did not match the configured frontend origin"
+      );
+    }
+
+    const pendingChallenge = await LoginChallengeModel.findOneAndUpdate(
+      { address: normalizedAddress, nonce: fields.nonce, consumedAt: null },
+      { $set: { consumedAt: new Date() } },
+      { sort: { createdAt: -1 } }
     );
+
+    if (!pendingChallenge) {
+      return sendError(res, 401, "INVALID_CHALLENGE", "Challenge not found or already used");
+    }
+
+    if (pendingChallenge.expiresAt.getTime() < Date.now()) {
+      return sendError(res, 401, "CHALLENGE_EXPIRED", "Challenge expired");
+    }
+
+    const role = await resolveUserRole(normalizedAddress);
+    const token = jwt.sign(
+      { address: normalizedAddress, role },
+      runtimeConfig.jwtSecret,
+      { expiresIn: "1h" }
+    );
+
+    return sendSuccess(res, {
+      token,
+      address: normalizedAddress,
+      role,
+    });
+  } catch (error) {
+    return sendError(res, 401, "INVALID_SIGNATURE", "Invalid SIWE signature or message verification failed");
   }
-
-  if (pendingChallenge.expiresAt.getTime() < Date.now()) {
-    return sendError(res, 401, "CHALLENGE_EXPIRED", "Challenge expired");
-  }
-
-  const role = await resolveUserRole(normalizedAddress);
-  const token = jwt.sign(
-    { address: normalizedAddress, role },
-    runtimeConfig.jwtSecret,
-    { expiresIn: "1h" }
-  );
-
-  return sendSuccess(res, {
-    token,
-    address: normalizedAddress,
-    role,
-  });
 });
 
 router.get("/me", authenticate, (req: AuthRequest, res) => {

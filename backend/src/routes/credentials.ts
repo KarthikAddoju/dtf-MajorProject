@@ -12,14 +12,24 @@ import { createAuditTrailEvent } from "../lib/audit";
 import { assertInstituteReviewerAccess } from "../lib/reviewers";
 import { isOptionalString } from "../lib/validation";
 import { buildMerkleTree } from "../lib/merkle";
+import { formatRequestLogPrefix } from "../lib/requestId";
 import { toSubmissionResponse } from "../lib/submissionResponses";
 import { DisclosureRecordModel } from "../models/DisclosureRecord";
 
+/**
+ * Credential disclosure and revocation routes for minted submissions.
+ */
 const router = Router();
 const MAX_REVOCATION_REASON_LENGTH = 1000;
 const MAX_DISCLOSURE_AUDIENCE_LENGTH = 500;
 
-// List all saved disclosure packages for the authenticated student
+/**
+ * Lists saved selective-disclosure packages for the authenticated student.
+ *
+ * Auth: bearer token required
+ * Input: `page`, `limit`
+ * Errors: `UNAUTHORIZED`
+ */
 router.get("/disclosures", authenticate, async (req: AuthRequest, res) => {
   try {
     if (!req.user) {
@@ -59,6 +69,13 @@ router.get("/disclosures", authenticate, async (req: AuthRequest, res) => {
   }
 });
 
+/**
+ * Finalizes an on-chain revocation after validating the wallet-signed transaction.
+ *
+ * Auth: admin or verifier JWT required
+ * Input: `{ txHash, reason? }`
+ * Errors: `VALIDATION_ERROR`, `SUBMISSION_NOT_FOUND`, `SUBMISSION_NOT_REVOCABLE`, `SUBMISSION_ALREADY_REVOKED`, `TRANSACTION_NOT_FOUND`
+ */
 router.post(
   "/:tokenId/revoke/finalize",
   authenticate,
@@ -232,7 +249,7 @@ router.post(
       }
 
       console.info(
-        `[Revocation Finalized] tokenId=${tokenId} txHash=${txHash} revoker=${req.user.address} reason="${normalizedReason}"`
+        `${formatRequestLogPrefix(res.locals.requestId)} [Revocation Finalized] tokenId=${tokenId} txHash=${txHash} revoker=${req.user.address} reason="${normalizedReason}"`
       );
 
       return sendSuccess(res, {
@@ -244,6 +261,13 @@ router.post(
   }
 );
 
+/**
+ * Creates and stores a selective-disclosure package for a minted credential.
+ *
+ * Auth: bearer token required
+ * Input: `{ claimKeys?, audience?, expiresAt? }`
+ * Errors: `VALIDATION_ERROR`, `SUBMISSION_NOT_FOUND`, `DISCLOSURE_NOT_AVAILABLE`, `DISCLOSURE_ROOT_MISMATCH`
+ */
 router.post(
   "/:tokenId/disclosures",
   authenticate,

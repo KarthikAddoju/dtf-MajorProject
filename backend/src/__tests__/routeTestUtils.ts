@@ -54,6 +54,7 @@ export function createMockResponse() {
     body: null as unknown,
     headers: {} as Record<string, string>,
     contentType: null as string | null,
+    locals: {} as Record<string, unknown>,
     status(code: number) {
       response.statusCode = code;
       return response;
@@ -61,6 +62,9 @@ export function createMockResponse() {
     setHeader(name: string, value: string) {
       response.headers[name] = value;
       return response;
+    },
+    getHeader(name: string) {
+      return response.headers[name];
     },
     type(value: string) {
       response.contentType = value;

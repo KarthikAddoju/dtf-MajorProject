@@ -3,6 +3,11 @@ import jwt from "jsonwebtoken";
 import { runtimeConfig } from "../config/runtime";
 import { sendError } from "../lib/api";
 
+/**
+ * JWT authentication and role-based authorization middleware for DACS API routes.
+ *
+ * Tokens are expected to contain the normalized wallet address and resolved user role.
+ */
 export interface AuthTokenPayload extends jwt.JwtPayload {
   address: string;
   role: string;
@@ -12,6 +17,9 @@ export interface AuthRequest extends Request {
   user?: AuthTokenPayload;
 }
 
+/**
+ * Validates the bearer token and attaches the decoded wallet/session payload to `req.user`.
+ */
 export const authenticate = (
   req: AuthRequest,
   res: Response,
@@ -49,6 +57,9 @@ export const authenticate = (
   }
 };
 
+/**
+ * Restricts a route to the supplied roles after `authenticate` has populated `req.user`.
+ */
 export const authorize = (...roles: string[]) => {
   return (req: AuthRequest, res: Response, next: NextFunction) => {
     if (!req.user || !roles.includes(req.user.role)) {

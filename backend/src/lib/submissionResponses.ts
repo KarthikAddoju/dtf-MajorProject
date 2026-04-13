@@ -8,6 +8,9 @@ import { toAuditTrailResponse } from "./audit";
 import { buildIpfsGatewayUrl } from "../services/ipfs";
 import { getSubmissionMintDraft } from "./mintWorkflow";
 
+/**
+ * Response-shaping helpers for submission, minting, and verification payloads.
+ */
 type VerificationStatus = (typeof VERIFICATION_STATUSES)[number];
 
 interface SubmissionResponseInput {
@@ -86,10 +89,16 @@ export function resolveSubmissionVerificationStatus(input: {
   return input.verificationStatus ?? "active";
 }
 
+/**
+ * Returns the authenticated API path for downloading private evidence.
+ */
 export function buildEvidenceUrl(submissionId: string) {
   return `/api/evidence/${submissionId}`;
 }
 
+/**
+ * Converts a submission document into the stable API response consumed by the frontend.
+ */
 export function toSubmissionResponse(submission: SubmissionResponseInput) {
   const id =
     typeof submission._id === "object" && submission._id !== null

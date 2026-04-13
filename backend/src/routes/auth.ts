@@ -9,6 +9,9 @@ import { LoginChallengeModel } from "../models/LoginChallenge";
 import { InstituteModel } from "../models/Institute";
 import { normalizeWalletAddress } from "../lib/institutes";
 
+/**
+ * Authentication routes for wallet-based SIWE login and JWT session bootstrap.
+ */
 const router = Router();
 const CHALLENGE_TTL_MS = 5 * 60 * 1000;
 const expectedFrontendUrl = new URL(runtimeConfig.frontendOrigin);
@@ -35,6 +38,13 @@ async function resolveUserRole(address: string) {
   return institute ? ("verifier" as const) : ("student" as const);
 }
 
+/**
+ * Creates a fresh SIWE nonce for a wallet address.
+ *
+ * Auth: public
+ * Input: `{ address }`
+ * Errors: `VALIDATION_ERROR`
+ */
 router.post("/challenge", async (req, res) => {
   const { address } = req.body;
 
@@ -70,6 +80,13 @@ router.post("/challenge", async (req, res) => {
   return sendSuccess(res, { nonce, expiresAt: expiresAt.getTime() });
 });
 
+/**
+ * Verifies the signed SIWE message and issues a short-lived JWT session token.
+ *
+ * Auth: public
+ * Input: `{ address, signature, message }`
+ * Errors: `VALIDATION_ERROR`, `INVALID_MESSAGE`, `INVALID_SIGNATURE`, `INVALID_CHALLENGE`, `CHALLENGE_EXPIRED`
+ */
 router.post("/verify", async (req, res) => {
   const { address, signature, message } = req.body;
 
@@ -159,6 +176,13 @@ router.post("/verify", async (req, res) => {
   }
 });
 
+/**
+ * Returns the currently authenticated wallet address and resolved role.
+ *
+ * Auth: bearer token required
+ * Input: none
+ * Errors: `UNAUTHORIZED`
+ */
 router.get("/me", authenticate, (req: AuthRequest, res) => {
   if (!req.user) {
     return sendError(res, 401, "UNAUTHORIZED", "You must be signed in");

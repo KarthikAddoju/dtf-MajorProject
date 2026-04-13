@@ -15,6 +15,7 @@ import {
   provider,
 } from "../services/blockchain";
 import { createAuditTrailEvent } from "../lib/audit";
+import { formatRequestLogPrefix } from "../lib/requestId";
 import { assertInstituteReviewerAccess } from "../lib/reviewers";
 import { toSubmissionResponse, resolveSubmissionVerificationStatus } from "../lib/submissionResponses";
 import {
@@ -23,9 +24,20 @@ import {
   type MintDraftSnapshot,
 } from "../lib/mintWorkflow";
 
+/**
+ * Reviewer/admin mint-preparation routes plus stale-mint recovery for fresh-chain resets.
+ */
 const router = Router();
+const MAX_REVIEW_NOTE_LENGTH = 1000;
 const mintControllerInterface = new ethers.Interface(mintControllerAbi);
 
+/**
+ * Resets locally stored minted records whose tokens no longer exist on the active chain.
+ *
+ * Auth: admin JWT required
+ * Input: none
+ * Errors: `UNAUTHORIZED`
+ */
 router.post(
   "/reset-stale-mints",
   authenticate,
@@ -174,6 +186,13 @@ function buildMintPayload(
   };
 }
 
+/**
+ * Prepares the exact wallet-signing payload for a mint without broadcasting on-chain.
+ *
+ * Auth: admin or verifier JWT required
+ * Input: `{ eduAmount, reviewNote?, expiresAt? }`
+ * Errors: `VALIDATION_ERROR`, `SUBMISSION_NOT_FOUND`, `SUBMISSION_NOT_MINTABLE`, `PREPARE_CONFLICT`
+ */
 router.post(
   "/:submissionId/prepare-mint",
   authenticate,
@@ -200,12 +219,15 @@ router.post(
         );
       }
 
-      if (typeof reviewNote === "string" && reviewNote.length > 1000) {
+      if (
+        typeof reviewNote === "string" &&
+        reviewNote.length > MAX_REVIEW_NOTE_LENGTH
+      ) {
         return sendError(
           res,
           400,
           "VALIDATION_ERROR",
-          "Review note exceeds 1000 characters"
+          `Review note exceeds ${MAX_REVIEW_NOTE_LENGTH} characters`
         );
       }
 
@@ -409,6 +431,13 @@ router.post(
   }
 );
 
+/**
+ * Finalizes a prepared mint by validating the signed transaction and on-chain event.
+ *
+ * Auth: admin or verifier JWT required
+ * Input: `{ txHash }`
+ * Errors: `VALIDATION_ERROR`, `SUBMISSION_NOT_FOUND`, `MINT_NOT_PREPARED`, `TX_FAILED`, `INVALID_TRANSACTION`, `MINT_PAYLOAD_MISMATCH`
+ */
 router.post(
   "/:submissionId/finalize-mint",
   authenticate,
@@ -656,7 +685,7 @@ router.post(
       }
 
       console.info(
-        `[Mint Finalized] tokenId=${mintedLog.tokenId} txHash=${txHash} verifier=${req.user.address}`
+        `${formatRequestLogPrefix(res.locals.requestId)} [Mint Finalized] tokenId=${mintedLog.tokenId} txHash=${txHash} verifier=${req.user.address}`
       );
 
       return sendSuccess(res, {

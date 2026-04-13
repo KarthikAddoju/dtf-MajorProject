@@ -35,6 +35,10 @@ describe("getBlockchainReadiness", () => {
       expect.objectContaining({
         status: "connected",
         chainId: 31337,
+        observedChainId: 31337,
+        expectedChainId: 31337,
+        chainIdMatchesConfig: true,
+        persistentDevnet: true,
         blockNumber: 123456,
         contractsReady: true,
         warnings: [],
@@ -55,6 +59,10 @@ describe("getBlockchainReadiness", () => {
 
     expect(readiness.status).toBe("degraded");
     expect(readiness.chainId).toBeNull();
+    expect(readiness.observedChainId).toBeNull();
+    expect(readiness.expectedChainId).toBe(31337);
+    expect(readiness.chainIdMatchesConfig).toBe(false);
+    expect(readiness.persistentDevnet).toBe(true);
     expect(readiness.blockNumber).toBeNull();
     expect(readiness.contractsReady).toBe(false);
     expect(readiness.warnings[0]).toContain("Could not reach the configured RPC endpoint");
@@ -84,6 +92,23 @@ describe("getBlockchainReadiness", () => {
     expect(readiness.contracts.mintControllerDeployed).toBe(true);
     expect(readiness.warnings).toContain(
       "No contract code found at POCT_ADDRESS (0x0000000000000000000000000000000000000001) on chain 31337."
+    );
+  });
+
+  it("reports a degraded chain when the observed chain id does not match config", async () => {
+    (getNetworkMock as any).mockResolvedValue({ chainId: 1n });
+    (getBlockNumberMock as any).mockResolvedValue(123456);
+    (getCodeMock as any).mockResolvedValue("0x1234");
+
+    const readiness = await getBlockchainReadiness();
+
+    expect(readiness.status).toBe("degraded");
+    expect(readiness.chainId).toBe(1);
+    expect(readiness.observedChainId).toBe(1);
+    expect(readiness.expectedChainId).toBe(31337);
+    expect(readiness.chainIdMatchesConfig).toBe(false);
+    expect(readiness.warnings).toContain(
+      "Observed chain 1 does not match expected CHAIN_ID 31337. Restart the backend after resyncing env files."
     );
   });
 });

@@ -9,6 +9,28 @@ function buildInstituteHash(shortCode: string) {
   return ethers.id(`DACS_INSTITUTE:${shortCode.trim().toUpperCase()}`);
 }
 
+function printCheckResult(label: string, passed: boolean, detail: string) {
+  console.log(`${passed ? "PASS" : "FAIL"} ${label}: ${detail}`);
+}
+
+function printSummaryBox(lines: string[]) {
+  const width = Math.max(...lines.map((line) => line.length), 24) + 4;
+  const border = `┌${"─".repeat(width - 2)}┐`;
+  const divider = `├${"─".repeat(width - 2)}┤`;
+  const footer = `└${"─".repeat(width - 2)}┘`;
+
+  console.log("");
+  console.log(border);
+  console.log(`│ ${"DACS Deployment Summary".padEnd(width - 4)} │`);
+  console.log(divider);
+
+  for (const line of lines) {
+    console.log(`│ ${line.padEnd(width - 4)} │`);
+  }
+
+  console.log(footer);
+}
+
 async function writeDeploymentArtifacts(deployment: Record<string, unknown>) {
   const deploymentsDirectory = path.resolve(__dirname, "..", "deployments");
   const deploymentFilePath = path.join(
@@ -29,6 +51,7 @@ async function writeDeploymentArtifacts(deployment: Record<string, unknown>) {
 
   const envSnippet = [
     `RPC_URL=http://127.0.0.1:8545`,
+    `CHAIN_ID=${deployment.chainId}`,
     `ADMIN_WALLET_ADDRESSES=${deployment.admin}`,
     `POCT_ADDRESS=${deployment.poctAddress}`,
     `EDU_ADDRESS=${deployment.eduAddress}`,
@@ -61,6 +84,9 @@ async function main() {
     .split(",")
     .map((value) => value.trim())
     .filter(Boolean);
+  const instituteHashes = instituteShortCodes.map((shortCode) =>
+    buildInstituteHash(shortCode)
+  );
   console.log("Deploying with account:", deployer.address);
   console.log("Account balance:", (await deployer.provider.getBalance(deployer.address)).toString(), "\n");
   console.log("Admin address:", adminAddress);
@@ -112,6 +138,33 @@ async function main() {
     );
   }
 
+  const poctController = await poct.mintController();
+  const eduController = await edu.mintController();
+  const verifierChecks = await Promise.all(
+    instituteHashes.map((instituteHash) =>
+      controller.instituteVerifiers(instituteHash, initialVerifierAddress)
+    )
+  );
+
+  printCheckResult(
+    "PoCT controller",
+    poctController.toLowerCase() === controllerAddress.toLowerCase(),
+    `${poctController} → ${controllerAddress}`
+  );
+  printCheckResult(
+    "EDUToken controller",
+    eduController.toLowerCase() === controllerAddress.toLowerCase(),
+    `${eduController} → ${controllerAddress}`
+  );
+
+  instituteShortCodes.forEach((shortCode, index) => {
+    printCheckResult(
+      `Institute verifier ${shortCode}`,
+      verifierChecks[index] === true,
+      `${initialVerifierAddress} approved=${verifierChecks[index]}`
+    );
+  });
+
   const deployment = {
     network: hre.network.name,
     chainId: Number(network.chainId),
@@ -120,6 +173,7 @@ async function main() {
     admin: adminAddress,
     verifier: initialVerifierAddress,
     instituteShortCodes,
+    instituteHashes,
     poctAddress: await poct.getAddress(),
     eduAddress: await edu.getAddress(),
     mintControllerAddress: controllerAddress,
@@ -131,6 +185,19 @@ async function main() {
   if (adminAddress.toLowerCase() === deployer.address.toLowerCase()) {
     console.log("🏫 Seed verifier authorization applied for:", instituteShortCodes.join(", "));
   }
+  printSummaryBox([
+    `Network: ${hre.network.name}`,
+    `Chain ID: ${Number(network.chainId)}`,
+    `Admin: ${adminAddress}`,
+    `Verifier: ${initialVerifierAddress}`,
+    `PoCT: ${await poct.getAddress()}`,
+    `EDUToken: ${await edu.getAddress()}`,
+    `MintController: ${controllerAddress}`,
+    `Institutes: ${instituteShortCodes.join(", ")}`,
+    ...instituteShortCodes.map(
+      (shortCode, index) => `${shortCode} hash: ${instituteHashes[index]}`
+    ),
+  ]);
   console.log("🎉 Full System Deployment Complete\n");
 }
 

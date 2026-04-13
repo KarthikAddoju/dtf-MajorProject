@@ -5,22 +5,28 @@ import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import mongoose from "mongoose";
 
-import authRoutes from "./routes/auth";
-import uploadRoutes from "./routes/upload";
-import instituteRoutes from "./routes/institutes";
-import submissionRoutes from "./routes/submissions";
-import analyticsRoutes from "./routes/analytics";
-import verifyRoutes from "./routes/verify";
-import healthRoutes from "./routes/health";
-import reviewRoutes from "./routes/reviews";
-import credentialRoutes from "./routes/credentials";
-import evidenceRoutes from "./routes/evidence";
 import { sendError } from "./lib/api";
 import { getBlockchainReadiness } from "./lib/blockchainReadiness";
+import {
+  formatRequestLogPrefix,
+  requestIdMiddleware,
+} from "./lib/requestId";
 import { seedDefaultInstitutes } from "./services/seed";
 import { runtimeConfig } from "./config/runtime";
+import introspectionRoutes from "./routes/introspection";
+import { apiRouteModules } from "./routes/manifest";
 
 const app = express();
+const MINUTE_MS = 60 * 1000;
+const TEN_MINUTES_MS = 10 * MINUTE_MS;
+const FIFTEEN_MINUTES_MS = 15 * MINUTE_MS;
+const AUTH_CHALLENGE_LIMIT = 15;
+const AUTH_VERIFY_LIMIT = 20;
+const UPLOAD_LIMIT = 10;
+const VERIFY_LIMIT = 60;
+const ANALYTICS_LIMIT = 90;
+const REVIEWS_LIMIT = 40;
+const CREDENTIALS_LIMIT = 40;
 
 function createRateLimiter(windowMs: number, limit: number) {
   return rateLimit({
@@ -51,42 +57,39 @@ app.use(
   })
 );
 app.use(express.json({ limit: runtimeConfig.requestBodyLimit }));
+app.use(requestIdMiddleware);
 
 // Request logger
-app.use((req, _res, next) => {
+app.use((req, res, next) => {
   const start = Date.now();
-  const originalEnd = _res.end.bind(_res);
-  _res.on("finish", () => {
+  res.on("finish", () => {
     const duration = Date.now() - start;
-    console.log(
-      `${req.method} ${req.originalUrl} ${_res.statusCode} ${duration}ms`
+    console.info(
+      `${formatRequestLogPrefix(res.locals.requestId)} ${req.method} ${req.originalUrl} ${res.statusCode} ${duration}ms`
     );
   });
   next();
 });
 
-app.use("/api/auth/challenge", createRateLimiter(10 * 60 * 1000, 15));
-app.use("/api/auth/verify", createRateLimiter(10 * 60 * 1000, 20));
-app.use("/api/upload", createRateLimiter(15 * 60 * 1000, 10));
-app.use("/api/verify", createRateLimiter(60 * 1000, 60));
-app.use("/api/analytics", createRateLimiter(60 * 1000, 90));
-app.use("/api/reviews", createRateLimiter(10 * 60 * 1000, 40));
-app.use("/api/credentials", createRateLimiter(10 * 60 * 1000, 40));
+app.use("/api/auth/challenge", createRateLimiter(TEN_MINUTES_MS, AUTH_CHALLENGE_LIMIT));
+app.use("/api/auth/verify", createRateLimiter(TEN_MINUTES_MS, AUTH_VERIFY_LIMIT));
+app.use("/api/upload", createRateLimiter(FIFTEEN_MINUTES_MS, UPLOAD_LIMIT));
+app.use("/api/verify", createRateLimiter(MINUTE_MS, VERIFY_LIMIT));
+app.use("/api/analytics", createRateLimiter(MINUTE_MS, ANALYTICS_LIMIT));
+app.use("/api/reviews", createRateLimiter(TEN_MINUTES_MS, REVIEWS_LIMIT));
+app.use("/api/credentials", createRateLimiter(TEN_MINUTES_MS, CREDENTIALS_LIMIT));
 
 app.get("/", (_req, res) => {
   res.send("Backend is running");
 });
 
-app.use("/api/auth", authRoutes);
-app.use("/api/upload", uploadRoutes);
-app.use("/api/evidence", evidenceRoutes);
-app.use("/api/institutes", instituteRoutes);
-app.use("/api/submissions", submissionRoutes);
-app.use("/api/reviews", reviewRoutes);
-app.use("/api/credentials", credentialRoutes);
-app.use("/api/analytics", analyticsRoutes);
-app.use("/api/verify", verifyRoutes);
-app.use("/api/health", healthRoutes);
+for (const routeModule of apiRouteModules) {
+  app.use(routeModule.basePath, routeModule.router);
+}
+
+if (process.env.NODE_ENV !== "production") {
+  app.use("/api/routes", introspectionRoutes);
+}
 
 app.use((_req, res) => {
   return sendError(res, 404, "NOT_FOUND", "Route not found");
@@ -100,7 +103,10 @@ app.use(
     res: express.Response,
     _next: express.NextFunction
   ) => {
-    console.error("[Unhandled Error]", err);
+    console.error(
+      `${formatRequestLogPrefix(res.locals.requestId)} [Unhandled Error]`,
+      err
+    );
     if (!res.headersSent) {
       return sendError(
         res,
@@ -128,10 +134,24 @@ mongoose.connect(runtimeConfig.mongodbUri)
   await seedDefaultInstitutes();
   const blockchainReadiness = await getBlockchainReadiness();
   console.log("MongoDB Connected");
+  console.log(
+    [
+      "[Startup]",
+      `chain=${blockchainReadiness.observedChainId ?? "unavailable"}`,
+      `expectedChain=${blockchainReadiness.expectedChainId}`,
+      `poct=${runtimeConfig.poctAddress}`,
+      `edu=${runtimeConfig.eduAddress}`,
+      `controller=${runtimeConfig.mintControllerAddress}`,
+    ].join(" ")
+  );
 
   if (blockchainReadiness.status === "connected") {
     console.log(
-      `[Startup] Blockchain ready on chain ${blockchainReadiness.chainId} at block ${blockchainReadiness.blockNumber}.`
+      [
+        "[Startup Ready]",
+        `chain=${blockchainReadiness.observedChainId}`,
+        `block=${blockchainReadiness.blockNumber}`,
+      ].join(" ")
     );
   } else {
     console.warn(

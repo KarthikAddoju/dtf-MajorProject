@@ -8,8 +8,18 @@ import { instituteHasVerifierAddress } from "../lib/reviewers";
 import { readEncryptedEvidence } from "../services/evidenceVault";
 import { analyseCertificate } from "../services/geminiAnalyser";
 
+/**
+ * Authenticated private-evidence download and analysis routes.
+ */
 const router = Router();
 
+/**
+ * Returns the encrypted evidence payload for a submission the caller can access.
+ *
+ * Auth: bearer token required
+ * Input: `submissionId` route param
+ * Errors: `UNAUTHORIZED`, `VALIDATION_ERROR`, `SUBMISSION_NOT_FOUND`, `FORBIDDEN`
+ */
 router.get("/:submissionId", authenticate, async (req: AuthRequest, res) => {
   try {
     if (!req.user) {
@@ -76,6 +86,13 @@ router.get("/:submissionId", authenticate, async (req: AuthRequest, res) => {
   }
 });
 
+/**
+ * Runs server-side AI analysis for a pending submission's private evidence bundle.
+ *
+ * Auth: admin JWT required
+ * Input: `submissionId` route param
+ * Errors: `UNAUTHORIZED`, `FORBIDDEN`, `VALIDATION_ERROR`, `SUBMISSION_NOT_FOUND`, `INVALID_STATUS`
+ */
 router.post("/:submissionId/analyse", authenticate, async (req: AuthRequest, res) => {
   try {
     if (!req.user) {

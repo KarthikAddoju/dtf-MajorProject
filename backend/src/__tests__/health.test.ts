@@ -25,12 +25,18 @@ describe("Health check route", () => {
     const payload = res.body as {
       success: boolean;
       status: string;
+      version: string;
       services: {
         blockchain: {
           status: string;
           chainId: number | null;
+          observedChainId: number | null;
+          expectedChainId: number;
+          chainIdMatchesConfig: boolean;
+          persistentDevnet: boolean;
           blockNumber: number | null;
           contractsReady: boolean;
+          warnings: string[];
         };
       };
       contracts: {
@@ -45,13 +51,19 @@ describe("Health check route", () => {
 
     expect(res.statusCode).toBe(200);
     expect(payload.success).toBe(true);
+    expect(payload.version).toBe("1.0.0");
     expect(["ok", "degraded"]).toContain(payload.status);
     expect(payload.services.blockchain).toEqual(
       expect.objectContaining({
         status: expect.any(String),
         chainId: expect.any(Number),
+        observedChainId: 31337,
+        expectedChainId: 31337,
+        chainIdMatchesConfig: true,
+        persistentDevnet: true,
         blockNumber: expect.any(Number),
         contractsReady: true,
+        warnings: [],
       })
     );
     expect(payload.contracts).toEqual(

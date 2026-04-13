@@ -3,6 +3,9 @@ import type { AuthTokenPayload } from "../middleware/authMiddleware";
 import { InstituteModel } from "../models/Institute";
 import { normalizeWalletAddress } from "./institutes";
 
+/**
+ * Reviewer-scope helpers shared across submissions, review, and revocation flows.
+ */
 export function isReviewerRole(role: string) {
   return role === "admin" || role === "verifier";
 }
@@ -16,6 +19,9 @@ export function instituteHasVerifierAddress(
   return (verifierAddresses ?? []).includes(normalizedAddress);
 }
 
+/**
+ * Returns all institute ids the reviewer is currently associated with.
+ */
 export async function getReviewerInstituteIds(address: string) {
   const institutes = await InstituteModel.find({
     verifierAddresses: normalizeWalletAddress(address),
@@ -30,6 +36,9 @@ export async function getReviewerInstituteIds(address: string) {
   );
 }
 
+/**
+ * Builds the MongoDB filter used to constrain reviewer-visible submission queries.
+ */
 export async function buildReviewerSubmissionScope(user?: AuthTokenPayload) {
   if (!user) {
     return null;
@@ -52,6 +61,9 @@ export async function buildReviewerSubmissionScope(user?: AuthTokenPayload) {
   };
 }
 
+/**
+ * Checks whether the authenticated reviewer can act on the supplied institute.
+ */
 export async function assertInstituteReviewerAccess(
   user: AuthTokenPayload | undefined,
   instituteId: unknown

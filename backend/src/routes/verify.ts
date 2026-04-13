@@ -13,6 +13,9 @@ import {
 } from "../services/blockchain";
 import { buildIpfsGatewayUrl, fetchJsonFromIPFS } from "../services/ipfs";
 
+/**
+ * Public verification route that combines on-chain credential data with stored submission metadata.
+ */
 const router = Router();
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN ?? "http://localhost:3000";
 
@@ -39,6 +42,13 @@ function isMissingCertificateError(error: unknown) {
   );
 }
 
+/**
+ * Verifies a token id against the active chain and returns proof details when present.
+ *
+ * Auth: public
+ * Input: `tokenId` route param
+ * Errors: `VALIDATION_ERROR`, `BLOCKCHAIN_UNAVAILABLE`, `TOKEN_NOT_FOUND`
+ */
 router.get("/:tokenId", async (req, res) => {
   try {
     const { tokenId } = req.params;

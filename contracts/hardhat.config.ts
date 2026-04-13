@@ -29,6 +29,9 @@ const PRIVATE_KEY = process.env.PRIVATE_KEY || "0x000000000000000000000000000000
 const config: HardhatUserConfig = {
   solidity: localSolcVersion,
   networks: {
+    localhost: {
+      url: "http://127.0.0.1:8545",
+    },
     sepolia: {
       url: process.env.SEPOLIA_RPC_URL || "",
       accounts: [PRIVATE_KEY],

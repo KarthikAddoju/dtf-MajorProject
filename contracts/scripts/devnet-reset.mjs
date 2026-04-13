@@ -18,7 +18,28 @@ async function removeIfPresent(targetPath) {
   }
 }
 
+async function wait(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
 async function main() {
+  const confirmed = process.argv.includes("--yes");
+
+  if (!confirmed) {
+    console.log("⚠️  This will permanently delete the local devnet state and localhost deployment snapshots.");
+    console.log("Re-run with `npm run devnet:reset -- --yes` to skip the countdown.");
+    console.log("");
+
+    for (let seconds = 5; seconds >= 1; seconds -= 1) {
+      console.log(`Resetting in ${seconds}... Press Ctrl-C to abort.`);
+      await wait(1000);
+    }
+
+    console.log("");
+  }
+
   const [removedStateDirectory, removedDeploymentJson, removedDeploymentEnv] =
     await Promise.all([
       removeIfPresent(stateDirectory),

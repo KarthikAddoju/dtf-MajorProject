@@ -5,6 +5,9 @@ import { InstituteModel } from "../models/Institute";
 import { CertificateSubmissionModel } from "../models/CertificateSubmission";
 import { toSubmissionResponse } from "../lib/submissionResponses";
 
+/**
+ * Public analytics routes used by dashboard summary cards and institute charts.
+ */
 const router = Router();
 
 interface CollegeLeaderboardRow {
@@ -80,6 +83,13 @@ async function getCollegeLeaderboard() {
   }));
 }
 
+/**
+ * Returns institute-level analytics grouped for dashboard charting.
+ *
+ * Auth: public
+ * Input: none
+ * Errors: `INTERNAL_SERVER_ERROR`
+ */
 router.get("/colleges", async (_req, res) => {
   try {
     const colleges = await getCollegeLeaderboard();
@@ -92,6 +102,13 @@ router.get("/colleges", async (_req, res) => {
   }
 });
 
+/**
+ * Returns top-level dashboard totals for submissions, mints, and EDU rewards.
+ *
+ * Auth: public
+ * Input: none
+ * Errors: `INTERNAL_SERVER_ERROR`
+ */
 router.get("/overview", async (_req, res) => {
   try {
     const [colleges, summaryRows, recentActivityRows, activeInstitutes] =

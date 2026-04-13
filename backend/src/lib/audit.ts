@@ -1,5 +1,8 @@
 import { Types } from "mongoose";
 
+/**
+ * Shared helpers for normalized audit-trail entries returned in submission payloads.
+ */
 export const AUDIT_TRAIL_EVENT_TYPES = [
   "submission_created",
   "mint_prepared",
@@ -29,6 +32,9 @@ interface AuditTrailEventLike {
   metadata?: Record<string, unknown>;
 }
 
+/**
+ * Creates a normalized audit-trail entry ready to persist in MongoDB.
+ */
 export function createAuditTrailEvent({
   type,
   title,
@@ -46,6 +52,9 @@ export function createAuditTrailEvent({
   };
 }
 
+/**
+ * Converts a stored audit entry into the API response shape used by the dashboard.
+ */
 export function toAuditTrailResponse(event: AuditTrailEventLike) {
   return {
     id:

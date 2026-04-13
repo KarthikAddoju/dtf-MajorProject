@@ -41,6 +41,9 @@ async function main() {
   console.log(`   RPC: http://${devnetConfig.host}:${devnetConfig.port}`);
   console.log(`   Chain ID: ${devnetConfig.chainId}`);
   console.log(`   State file: ${path.relative(contractsRoot, stateFilePath)}`);
+  console.log(
+    "⚠️  Use Ctrl-C for a clean shutdown. Force-killing the process can lose recent chain state."
+  );
 
   if (stateFileExists) {
     console.log(
@@ -68,6 +71,8 @@ async function main() {
       devnetConfig.chainId,
       "--mnemonic",
       devnetConfig.mnemonic,
+      "--state-interval",
+      "60",
       "--state",
       stateFilePath,
     ],

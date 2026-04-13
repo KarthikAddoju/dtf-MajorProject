@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.26;
+pragma solidity 0.8.26;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
@@ -8,6 +8,7 @@ contract PoCT is ERC721Enumerable, Ownable {
     uint256 private _tokenIds;
     address public mintController;
 
+    /// @notice Reverts when a credential holder attempts to transfer a soulbound token.
     error SoulboundTransferNotAllowed();
 
     enum CredentialStatus {
@@ -29,6 +30,10 @@ contract PoCT is ERC721Enumerable, Ownable {
 
     mapping(uint256 => Certificate) public certificates;
 
+    /// @notice Emitted when an on-chain credential is revoked.
+    /// @param tokenId Revoked credential token id.
+    /// @param revoker Controller account that executed the revocation.
+    /// @param reasonHash Hash of the revocation reason supplied by the controller.
     event CredentialRevoked(
         uint256 indexed tokenId,
         address indexed revoker,
@@ -40,10 +45,15 @@ contract PoCT is ERC721Enumerable, Ownable {
         _;
     }
 
+    /// @notice Emitted when the mint controller address is updated.
+    /// @param previousController Previous mint controller.
+    /// @param newController New mint controller.
     event MintControllerUpdated(address indexed previousController, address indexed newController);
 
     constructor() ERC721("ProofOfCourseToken", "PoCT") Ownable(msg.sender) {}
 
+    /// @notice Sets the controller allowed to mint and revoke credentials.
+    /// @param controller New mint controller contract address.
     function setMintController(address controller) external onlyOwner {
         require(controller != address(0), "PoCT: controller is zero address");
         address previous = mintController;
@@ -51,6 +61,15 @@ contract PoCT is ERC721Enumerable, Ownable {
         emit MintControllerUpdated(previous, controller);
     }
 
+    /// @notice Mints a soulbound credential to a student wallet.
+    /// @param student Recipient wallet address.
+    /// @param publicProofCid IPFS CID for the public proof bundle.
+    /// @param claimsRoot Merkle root that commits to the credential claims.
+    /// @param instituteHash Institute identifier bound to the credential.
+    /// @param verifier Reviewer wallet that approved the mint.
+    /// @param expiresAt Unix timestamp when the credential expires, or zero for no expiry.
+    /// @return Newly minted credential token id.
+    /// @dev Only the configured controller can mint credentials.
     function mint(
         address student,
         string memory publicProofCid,
@@ -88,6 +107,10 @@ contract PoCT is ERC721Enumerable, Ownable {
         return newTokenId;
     }
 
+    /// @notice Revokes a previously minted credential.
+    /// @param tokenId Credential token id.
+    /// @param reasonHash Hash of the human-readable revocation reason.
+    /// @dev Only the configured controller can revoke credentials.
     function revoke(uint256 tokenId, bytes32 reasonHash) external onlyController {
         require(_ownerOf(tokenId) != address(0), "PoCT: token does not exist");
         Certificate storage certificate = certificates[tokenId];
@@ -99,11 +122,18 @@ contract PoCT is ERC721Enumerable, Ownable {
         emit CredentialRevoked(tokenId, msg.sender, reasonHash);
     }
 
+    /// @notice Returns the institute hash associated with a credential.
+    /// @param tokenId Credential token id.
+    /// @return Institute hash stored for the credential.
     function instituteHashOf(uint256 tokenId) external view returns (bytes32) {
         require(_ownerOf(tokenId) != address(0), "PoCT: token does not exist");
         return certificates[tokenId].instituteHash;
     }
 
+    /// @notice Returns the current verification status code for a credential.
+    /// @param tokenId Credential token id.
+    /// @return Status code where `0=active`, `1=expired`, and `2=revoked`.
+    /// @dev Expiry is derived from `expiresAt`; revocation always takes precedence.
     function credentialStatus(uint256 tokenId) public view returns (uint8) {
         require(_ownerOf(tokenId) != address(0), "PoCT: token does not exist");
 

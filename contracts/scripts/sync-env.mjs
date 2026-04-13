@@ -60,6 +60,7 @@ async function main() {
     path.join(repoRoot, "backend", ".env.example"),
     {
       RPC_URL: "http://127.0.0.1:8545",
+      CHAIN_ID: String(deployment.chainId ?? 31337),
       ADMIN_WALLET_ADDRESSES: deployment.admin ?? deployment.deployer,
       POCT_ADDRESS: deployment.poctAddress,
       EDU_ADDRESS: deployment.eduAddress,

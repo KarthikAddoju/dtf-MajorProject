@@ -1,5 +1,8 @@
 import mongoose from "mongoose";
 
+/**
+ * Lightweight validation helpers shared across route handlers.
+ */
 const CREDENTIAL_TYPE_SET = new Set([
   "course",
   "workshop",

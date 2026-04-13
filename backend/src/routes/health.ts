@@ -3,7 +3,11 @@ import mongoose from "mongoose";
 import { sendSuccess } from "../lib/api";
 import { runtimeConfig } from "../config/runtime";
 import { getBlockchainReadiness } from "../lib/blockchainReadiness";
+import packageJson from "../../package.json";
 
+/**
+ * Operational readiness route covering API, database, blockchain, auth, and IPFS configuration.
+ */
 const router = Router();
 
 function getDatabaseStateLabel(readyState: number) {
@@ -19,6 +23,13 @@ function getDatabaseStateLabel(readyState: number) {
   }
 }
 
+/**
+ * Returns the current backend readiness snapshot for local demo diagnostics.
+ *
+ * Auth: public
+ * Input: none
+ * Errors: none; degraded states are returned in-band.
+ */
 router.get("/", async (_req, res) => {
   const checkedAt = new Date().toISOString();
   const databaseState = getDatabaseStateLabel(mongoose.connection.readyState);
@@ -33,6 +44,7 @@ router.get("/", async (_req, res) => {
 
   return sendSuccess(res, {
     status: overallStatus,
+    version: packageJson.version,
     checkedAt,
     services: {
       api: {
@@ -45,8 +57,13 @@ router.get("/", async (_req, res) => {
       blockchain: {
         status: blockchainReadiness.status,
         chainId: blockchainReadiness.chainId,
+        observedChainId: blockchainReadiness.observedChainId,
+        expectedChainId: blockchainReadiness.expectedChainId,
+        chainIdMatchesConfig: blockchainReadiness.chainIdMatchesConfig,
+        persistentDevnet: blockchainReadiness.persistentDevnet,
         blockNumber: blockchainReadiness.blockNumber,
         contractsReady: blockchainReadiness.contractsReady,
+        warnings: blockchainReadiness.warnings,
       },
       ipfs: {
         status: ipfsConfigured ? "configured" : "missing",

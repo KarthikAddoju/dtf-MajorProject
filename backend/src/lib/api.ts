@@ -1,4 +1,5 @@
 import { Response } from "express";
+import { formatRequestLogPrefix } from "./requestId";
 
 export type FieldErrors = Record<string, string>;
 
@@ -35,6 +36,6 @@ export function handleServerError(
   error: unknown,
   message = "An unexpected error occurred"
 ) {
-  console.error(error);
+  console.error(formatRequestLogPrefix(res.locals?.requestId), error);
   return sendError(res, 500, "INTERNAL_SERVER_ERROR", message);
 }

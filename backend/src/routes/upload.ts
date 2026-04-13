@@ -20,6 +20,9 @@ import {
 } from "../services/evidenceVault";
 import { toSubmissionResponse } from "../lib/submissionResponses";
 
+/**
+ * Upload route for new certificate evidence submissions from authenticated students.
+ */
 const router = express.Router();
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const ALLOWED_MIME_TYPES = new Set([
@@ -69,6 +72,13 @@ function isMongoDuplicateKeyError(error: unknown): error is { code: number } {
   );
 }
 
+/**
+ * Accepts an evidence upload, encrypts the file, and creates a pending submission record.
+ *
+ * Auth: bearer token required
+ * Input: multipart form upload plus course/institute metadata
+ * Errors: `UNAUTHORIZED`, `VALIDATION_ERROR`, `FILE_TOO_LARGE`, `INVALID_FILE`, `DUPLICATE_SUBMISSION`
+ */
 router.post("/", authenticate, async (req: AuthRequest, res) => {
   try {
     await runUploadMiddleware(req, res);

@@ -8,6 +8,9 @@ import { isNonEmptyString, isOptionalString, isValidObjectId, slugify } from "..
 import { uniqueWalletAddresses } from "../lib/institutes";
 import { toSubmissionResponse } from "../lib/submissionResponses";
 
+/**
+ * Institute catalog and admin-management routes used by the dashboard and reviewer setup flows.
+ */
 const router = Router();
 const MAX_INSTITUTE_NAME_LENGTH = 120;
 const MAX_INSTITUTE_SHORT_CODE_LENGTH = 16;
@@ -34,6 +37,13 @@ function toInstituteResponse(institute: {
   };
 }
 
+/**
+ * Lists active institutes for public form selection and browsing.
+ *
+ * Auth: public
+ * Input: none
+ * Errors: `INTERNAL_SERVER_ERROR`
+ */
 router.get("/", async (_req, res) => {
   try {
     const institutes = await InstituteModel.find({ isActive: true })
@@ -48,6 +58,13 @@ router.get("/", async (_req, res) => {
   }
 });
 
+/**
+ * Lists all institutes, including inactive ones, for admin management screens.
+ *
+ * Auth: admin JWT required
+ * Input: none
+ * Errors: `UNAUTHORIZED`, `FORBIDDEN`
+ */
 router.get("/manage", authenticate, authorize("admin"), async (_req, res) => {
   try {
     const institutes = await InstituteModel.find()
@@ -62,6 +79,13 @@ router.get("/manage", authenticate, authorize("admin"), async (_req, res) => {
   }
 });
 
+/**
+ * Returns a public-facing institute profile with summary, top courses, and recent credentials.
+ *
+ * Auth: public
+ * Input: `slug` route param
+ * Errors: `INSTITUTE_NOT_FOUND`
+ */
 router.get("/:slug/profile", async (req, res) => {
   try {
     const slug = String(req.params.slug);
@@ -223,6 +247,13 @@ router.get("/:slug/profile", async (req, res) => {
   }
 });
 
+/**
+ * Creates a new institute and optionally seeds verifier wallet addresses.
+ *
+ * Auth: admin JWT required
+ * Input: `{ name, shortCode, verifierAddresses? }`
+ * Errors: `VALIDATION_ERROR`, `INSTITUTE_ALREADY_EXISTS`
+ */
 router.post("/", authenticate, authorize("admin"), async (req: AuthRequest, res) => {
   try {
     const { name, shortCode, verifierAddresses } = req.body as {
@@ -309,6 +340,13 @@ router.post("/", authenticate, authorize("admin"), async (req: AuthRequest, res)
   }
 });
 
+/**
+ * Updates institute metadata, active status, and reviewer wallet assignments.
+ *
+ * Auth: admin JWT required
+ * Input: `{ name?, shortCode?, isActive?, verifierAddresses? }`
+ * Errors: `VALIDATION_ERROR`, `INSTITUTE_NOT_FOUND`, `INSTITUTE_ALREADY_EXISTS`
+ */
 router.patch("/:id", authenticate, authorize("admin"), async (req, res) => {
   try {
     const id = String(req.params.id);

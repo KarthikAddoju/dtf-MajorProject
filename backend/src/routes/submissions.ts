@@ -5,10 +5,48 @@ import { CertificateSubmissionModel } from "../models/CertificateSubmission";
 import { authenticate, authorize, type AuthRequest } from "../middleware/authMiddleware";
 import { isOptionalString, isValidObjectId } from "../lib/validation";
 import { buildReviewerSubmissionScope, assertInstituteReviewerAccess } from "../lib/reviewers";
+import { formatRequestLogPrefix } from "../lib/requestId";
 import { toSubmissionResponse } from "../lib/submissionResponses";
 
+/**
+ * Submission listing and reviewer decision routes for admin, verifier, and student dashboards.
+ */
 const router = Router();
+const DEFAULT_PAGE = 1;
+const DEFAULT_LIMIT = 50;
+const MAX_LIMIT = 100;
+const MAX_REVIEW_NOTE_LENGTH = 1000;
 
+/**
+ * Parses common page/limit query parameters used by submission lists.
+ */
+function parsePagination(query: { page?: unknown; limit?: unknown }) {
+  const page = Math.max(
+    DEFAULT_PAGE,
+    parseInt(String(query.page ?? String(DEFAULT_PAGE)), 10) || DEFAULT_PAGE
+  );
+  const limit = Math.min(
+    MAX_LIMIT,
+    Math.max(
+      DEFAULT_PAGE,
+      parseInt(String(query.limit ?? String(DEFAULT_LIMIT)), 10) || DEFAULT_LIMIT
+    )
+  );
+
+  return {
+    page,
+    limit,
+    skip: (page - 1) * limit,
+  };
+}
+
+/**
+ * Lists submissions that fall within the authenticated reviewer scope.
+ *
+ * Auth: admin or verifier JWT required
+ * Input: `page`, `limit`
+ * Errors: `FORBIDDEN`
+ */
 router.get("/", authenticate, authorize("admin", "verifier"), async (req: AuthRequest, res) => {
   try {
     const reviewerScope = await buildReviewerSubmissionScope(req.user);
@@ -17,9 +55,7 @@ router.get("/", authenticate, authorize("admin", "verifier"), async (req: AuthRe
       return sendError(res, 403, "FORBIDDEN", "Forbidden");
     }
 
-    const page = Math.max(1, parseInt(String(req.query.page ?? "1"), 10) || 1);
-    const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit ?? "50"), 10) || 50));
-    const skip = (page - 1) * limit;
+    const { page, limit, skip } = parsePagination(req.query);
 
     const [submissions, total] = await Promise.all([
       CertificateSubmissionModel.find(reviewerScope)
@@ -39,6 +75,13 @@ router.get("/", authenticate, authorize("admin", "verifier"), async (req: AuthRe
   }
 });
 
+/**
+ * Lists submissions owned by the authenticated student wallet.
+ *
+ * Auth: bearer token required
+ * Input: none
+ * Errors: `UNAUTHORIZED`
+ */
 router.get("/me", authenticate, async (req: AuthRequest, res) => {
   try {
     if (!req.user) {
@@ -59,6 +102,13 @@ router.get("/me", authenticate, async (req: AuthRequest, res) => {
   }
 });
 
+/**
+ * Lists pending-review submissions within the authenticated reviewer scope.
+ *
+ * Auth: admin or verifier JWT required
+ * Input: `page`, `limit`
+ * Errors: `FORBIDDEN`
+ */
 router.get("/pending", authenticate, authorize("admin", "verifier"), async (req: AuthRequest, res) => {
   try {
     const reviewerScope = await buildReviewerSubmissionScope(req.user);
@@ -67,9 +117,7 @@ router.get("/pending", authenticate, authorize("admin", "verifier"), async (req:
       return sendError(res, 403, "FORBIDDEN", "Forbidden");
     }
 
-    const page = Math.max(1, parseInt(String(req.query.page ?? "1"), 10) || 1);
-    const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit ?? "50"), 10) || 50));
-    const skip = (page - 1) * limit;
+    const { page, limit, skip } = parsePagination(req.query);
     const filter = { ...reviewerScope, status: "pending_review" };
 
     const [submissions, total] = await Promise.all([
@@ -90,6 +138,13 @@ router.get("/pending", authenticate, authorize("admin", "verifier"), async (req:
   }
 });
 
+/**
+ * Rejects a pending submission and records the reviewer note in the audit trail.
+ *
+ * Auth: admin or verifier JWT required
+ * Input: `reviewNote?`
+ * Errors: `VALIDATION_ERROR`, `SUBMISSION_NOT_FOUND`, `SUBMISSION_NOT_REJECTABLE`, `ALREADY_PROCESSED`
+ */
 router.post(
   "/:id/reject",
   authenticate,
@@ -114,12 +169,15 @@ router.post(
 
       const normalizedReviewNote = reviewNote?.trim();
 
-      if (normalizedReviewNote && normalizedReviewNote.length > 1000) {
+      if (
+        normalizedReviewNote &&
+        normalizedReviewNote.length > MAX_REVIEW_NOTE_LENGTH
+      ) {
         return sendError(
           res,
           400,
           "VALIDATION_ERROR",
-          "Review note must be 1000 characters or fewer"
+          `Review note must be ${MAX_REVIEW_NOTE_LENGTH} characters or fewer`
         );
       }
 
@@ -192,7 +250,7 @@ router.post(
       }
 
       console.info(
-        `[Submission Rejected] id=${id} reviewer=${req.user?.address ?? "unknown"}`
+        `${formatRequestLogPrefix(res.locals.requestId)} [Submission Rejected] id=${id} reviewer=${req.user?.address ?? "unknown"}`
       );
 
       return sendSuccess(res, {

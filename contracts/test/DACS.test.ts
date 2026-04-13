@@ -1,5 +1,6 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
+import { time } from "@nomicfoundation/hardhat-network-helpers";
 import type { PoCT, EDUToken, MintController } from "../typechain-types";
 import type { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
 
@@ -657,6 +658,38 @@ describe("DACS Contracts", function () {
           verifier.address,
           true
         );
+      });
+
+      it("returns Expired after the credential expiry timestamp passes", async function () {
+        const currentTimestamp = await time.latest();
+        const expiresAt = currentTimestamp + 60;
+
+        const tx = await controller
+          .connect(verifier)
+          .dualMint(
+            student.address,
+            PROOF_CID,
+            CLAIMS_ROOT,
+            INSTITUTE_HASH,
+            EDU_AMOUNT,
+            expiresAt
+          );
+        const receipt = await tx.wait();
+        const event = receipt?.logs
+          .map((log) => {
+            try {
+              return controller.interface.parseLog(log);
+            } catch {
+              return null;
+            }
+          })
+          .find((e) => e?.name === "DualMinted");
+        const tokenId = event?.args?.poctTokenId as bigint;
+
+        await time.increaseTo(expiresAt + 1);
+
+        const status = await poct.credentialStatus(tokenId);
+        expect(status).to.equal(1); // CredentialStatus.Expired
       });
 
       it("returns Active for a fresh credential", async function () {

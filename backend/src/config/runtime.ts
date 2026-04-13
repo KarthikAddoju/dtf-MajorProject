@@ -54,6 +54,20 @@ function parsePort(value: string | undefined, fallback: number) {
   return parsed;
 }
 
+function parseChainId(value: string | undefined, fallback: number) {
+  if (!value) {
+    return fallback;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error("CHAIN_ID must be a positive integer");
+  }
+
+  return parsed;
+}
+
 function parseAddressList(keys: string[]) {
   const rawValue =
     keys.map((key) => readEnv(key)).find((value) => typeof value === "string") ??
@@ -105,6 +119,7 @@ export const runtimeConfig = {
   port: parsePort(readEnv("PORT"), 4000),
   mongodbUri: readEnv("MONGODB_URI") ?? "mongodb://127.0.0.1:27017/dtf",
   frontendOrigin: readEnv("FRONTEND_ORIGIN") ?? "http://localhost:3000",
+  expectedChainId: parseChainId(readEnv("CHAIN_ID"), 31337),
   jwtSecret: requireNonPlaceholderEnv("JWT_SECRET", ["change-me", "supersecret"]),
   adminWalletAddresses,
   verifierWalletAddresses,

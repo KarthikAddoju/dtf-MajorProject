@@ -5,6 +5,7 @@
   "scripts": {
     "compile": "HOME=$PWD npx hardhat compile",
     "devnet:start": "node scripts/devnet-start.mjs",
+    "devnet:status": "node scripts/devnet-status.mjs",
     "devnet:reset": "node scripts/devnet-reset.mjs",
     "deploy": "HOME=$PWD npx hardhat run scripts/deploy.ts",
     "deploy:local": "HOME=$PWD npx hardhat run scripts/deploy.ts --network localhost",

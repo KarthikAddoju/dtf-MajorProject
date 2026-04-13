@@ -85,11 +85,10 @@ Terminal 2:
 
 ```bash
 cd contracts
-npm run deploy:local
-npm run sync:env
+npm run deploy:sync
 ```
 
-`npm run sync:env` writes the latest contract addresses into:
+`npm run deploy:sync` deploys the contracts to the local Hardhat node and writes the latest contract addresses into:
 - `backend/.env.local`
 - `frontend/.env.local`
 
@@ -101,6 +100,8 @@ Terminal 3:
 cd backend
 npm run dev
 ```
+
+Start or restart the backend only after `npm run deploy:sync` completes so it loads the freshly synced contract addresses at process start.
 
 Terminal 4:
 
@@ -131,7 +132,12 @@ Frontend example:
 - `frontend/.env.example`
 
 Important operational rule:
-- Restarting Hardhat resets chain state, so redeploy and rerun `npm run sync:env` after every restart.
+- Restarting Hardhat resets chain state, so rerun `npm run deploy:sync` after every restart.
+
+If Hardhat is restarted during a live demo:
+1. Rerun `npm run deploy:sync`, then restart the backend so it picks up the fresh addresses.
+2. Clear MetaMask activity for the demo wallets to avoid nonce conflicts.
+3. Use the admin console `Reset stale mints` action before reminting any affected credentials.
 
 ## Validation Commands
 

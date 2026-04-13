@@ -55,6 +55,34 @@ const responseSchema: Schema = {
   required: ["confidence", "suggestedEduAmount", "suggestionReason", "rawSummary"],
 };
 
+function isNullableString(value: unknown): value is string | null {
+  return value === null || typeof value === "string";
+}
+
+function isCertificateInsight(value: unknown): value is CertificateInsight {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+
+  return (
+    isNullableString(candidate.institution) &&
+    isNullableString(candidate.courseName) &&
+    isNullableString(candidate.credentialType) &&
+    isNullableString(candidate.grade) &&
+    isNullableString(candidate.issueDate) &&
+    isNullableString(candidate.durationOrCredits) &&
+    (candidate.confidence === "high" ||
+      candidate.confidence === "medium" ||
+      candidate.confidence === "low") &&
+    typeof candidate.suggestedEduAmount === "number" &&
+    Number.isInteger(candidate.suggestedEduAmount) &&
+    typeof candidate.suggestionReason === "string" &&
+    typeof candidate.rawSummary === "string"
+  );
+}
+
 export async function analyseCertificate(
   buffer: Buffer,
   mimeType: string
@@ -83,7 +111,10 @@ export async function analyseCertificate(
       },
     }),
     new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("Gemini analysis timed out after 45 seconds")), 45_000)
+      setTimeout(
+        () => reject(new Error("AI analysis took too long. Please retry the certificate analysis.")),
+        45_000
+      )
     ),
   ]);
 
@@ -93,5 +124,11 @@ export async function analyseCertificate(
     throw new Error("Gemini returned an empty response");
   }
 
-  return JSON.parse(text) as CertificateInsight;
+  const parsed = JSON.parse(text) as unknown;
+
+  if (!isCertificateInsight(parsed)) {
+    throw new Error("Gemini returned an invalid certificate insight payload");
+  }
+
+  return parsed;
 }

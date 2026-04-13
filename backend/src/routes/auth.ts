@@ -146,7 +146,7 @@ router.post("/verify", async (req, res) => {
     const token = jwt.sign(
       { address: normalizedAddress, role },
       runtimeConfig.jwtSecret,
-      { expiresIn: "1h" }
+      { algorithm: "HS256", expiresIn: "1h" }
     );
 
     return sendSuccess(res, {

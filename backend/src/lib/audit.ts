@@ -6,6 +6,7 @@ export const AUDIT_TRAIL_EVENT_TYPES = [
   "submission_rejected",
   "submission_minted",
   "submission_revoked",
+  "submission_reset",
 ] as const;
 
 export type AuditTrailEventType = (typeof AUDIT_TRAIL_EVENT_TYPES)[number];

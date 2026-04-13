@@ -16,6 +16,8 @@ import { toSubmissionResponse } from "../lib/submissionResponses";
 import { DisclosureRecordModel } from "../models/DisclosureRecord";
 
 const router = Router();
+const MAX_REVOCATION_REASON_LENGTH = 1000;
+const MAX_DISCLOSURE_AUDIENCE_LENGTH = 500;
 
 // List all saved disclosure packages for the authenticated student
 router.get("/disclosures", authenticate, async (req: AuthRequest, res) => {
@@ -78,6 +80,17 @@ router.post(
         );
       }
 
+      const normalizedReason = reason?.trim() || "Credential revoked";
+
+      if (normalizedReason.length > MAX_REVOCATION_REASON_LENGTH) {
+        return sendError(
+          res,
+          400,
+          "VALIDATION_ERROR",
+          `Revocation reason must be ${MAX_REVOCATION_REASON_LENGTH} characters or fewer`
+        );
+      }
+
       const submission = await CertificateSubmissionModel.findOne({ tokenId });
 
       if (!submission) {
@@ -98,7 +111,24 @@ router.post(
         return sendError(res, 403, "FORBIDDEN", "Forbidden");
       }
 
-      const normalizedReason = reason?.trim() || "Credential revoked";
+      if (submission.status !== "minted") {
+        return sendError(
+          res,
+          409,
+          "SUBMISSION_NOT_REVOCABLE",
+          "Only minted submissions can be revoked"
+        );
+      }
+
+      if (submission.verificationStatus === "revoked") {
+        return sendError(
+          res,
+          409,
+          "SUBMISSION_ALREADY_REVOKED",
+          "This credential has already been revoked"
+        );
+      }
+
       const reasonHash = ethers.id(normalizedReason);
       const [receipt, transaction] = await Promise.all([
         provider.getTransactionReceipt(txHash),
@@ -160,33 +190,53 @@ router.post(
         Number(block?.timestamp ?? Math.floor(Date.now() / 1000)) * 1000
       );
 
-      submission.verificationStatus = "revoked";
-      submission.revokedAt = revokedAt;
-      submission.revocationReason = normalizedReason;
-      submission.revocationReasonHash = reasonHash;
-      submission.auditTrail = [
-        ...(submission.auditTrail ?? []),
-        createAuditTrailEvent({
-          type: "submission_revoked",
-          title: "Credential revoked",
-          description:
-            "Reviewer finalized an on-chain revocation for this credential.",
-          actorAddress: req.user.address,
-          metadata: {
-            tokenId,
-            txHash,
-            reasonHash,
+      const revokedSubmission = await CertificateSubmissionModel.findOneAndUpdate(
+        {
+          _id: submission._id,
+          tokenId,
+          status: "minted",
+          verificationStatus: { $ne: "revoked" },
+        },
+        {
+          $set: {
+            verificationStatus: "revoked",
+            revokedAt,
+            revocationReason: normalizedReason,
+            revocationReasonHash: reasonHash,
           },
-        }),
-      ];
-      await submission.save();
+          $push: {
+            auditTrail: createAuditTrailEvent({
+              type: "submission_revoked",
+              title: "Credential revoked",
+              description:
+                "Reviewer finalized an on-chain revocation for this credential.",
+              actorAddress: req.user.address,
+              metadata: {
+                tokenId,
+                txHash,
+                reasonHash,
+              },
+            }),
+          },
+        },
+        { new: true }
+      );
+
+      if (!revokedSubmission) {
+        return sendError(
+          res,
+          409,
+          "ALREADY_PROCESSED",
+          "Submission was already updated by another request"
+        );
+      }
 
       console.info(
         `[Revocation Finalized] tokenId=${tokenId} txHash=${txHash} revoker=${req.user.address} reason="${normalizedReason}"`
       );
 
       return sendSuccess(res, {
-        submission: toSubmissionResponse(submission.toObject()),
+        submission: toSubmissionResponse(revokedSubmission.toObject()),
       });
     } catch (error) {
       return handleServerError(res, error, "Could not finalize revocation");
@@ -238,6 +288,18 @@ router.post(
           400,
           "VALIDATION_ERROR",
           "audience must be a string when provided"
+        );
+      }
+
+      if (
+        typeof audience === "string" &&
+        audience.length > MAX_DISCLOSURE_AUDIENCE_LENGTH
+      ) {
+        return sendError(
+          res,
+          400,
+          "VALIDATION_ERROR",
+          `audience must be ${MAX_DISCLOSURE_AUDIENCE_LENGTH} characters or fewer`
         );
       }
 

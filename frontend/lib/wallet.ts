@@ -1,4 +1,4 @@
-import { BrowserProvider, type JsonRpcSigner } from "ethers"
+import { BrowserProvider, getAddress, type JsonRpcSigner } from "ethers"
 import { CHAIN_ID, RPC_URL } from "@/lib/config"
 import type { AuthFlowState } from "@/lib/types"
 
@@ -114,8 +114,31 @@ export function getWalletSignInLabel(
   }
 }
 
-function normalizeAddress(address: string) {
-  return address.toLowerCase()
+export function normalizeWalletAddress(address: string) {
+  return getAddress(address.trim())
+}
+
+export function tryNormalizeWalletAddress(address: string | null | undefined) {
+  if (!address) {
+    return null
+  }
+
+  try {
+    return normalizeWalletAddress(address)
+  } catch {
+    const normalized = address.trim().toLowerCase()
+    return normalized.length > 0 ? normalized : null
+  }
+}
+
+export function areWalletAddressesEqual(
+  left: string | null | undefined,
+  right: string | null | undefined
+) {
+  const normalizedLeft = tryNormalizeWalletAddress(left)
+  const normalizedRight = tryNormalizeWalletAddress(right)
+
+  return normalizedLeft !== null && normalizedLeft === normalizedRight
 }
 
 function getInjectedProvider() {
@@ -158,7 +181,7 @@ function ensureEthereumProvider() {
 
 async function buildWalletSnapshot(provider: BrowserProvider) {
   const signer = await provider.getSigner()
-  const address = normalizeAddress(await signer.getAddress())
+  const address = normalizeWalletAddress(await signer.getAddress())
   const network = await provider.getNetwork()
   const chainId = Number(network.chainId)
 

@@ -90,6 +90,13 @@ export function getAuditTrailEventAccent(type: AuditTrailEventType) {
         icon:
           "border border-fuchsia-500/30 bg-fuchsia-500/10 text-fuchsia-200",
       }
+    case "submission_reset":
+      return {
+        badge:
+          "border border-orange-500/30 bg-orange-500/10 text-orange-200",
+        icon:
+          "border border-orange-500/30 bg-orange-500/10 text-orange-200",
+      }
   }
 }
 
@@ -105,6 +112,8 @@ export function getAuditTrailEventIcon(type: AuditTrailEventType) {
       return "MT"
     case "submission_revoked":
       return "RV"
+    case "submission_reset":
+      return "RS"
   }
 }
 

@@ -112,6 +112,17 @@ router.post(
         );
       }
 
+      const normalizedReviewNote = reviewNote?.trim();
+
+      if (normalizedReviewNote && normalizedReviewNote.length > 1000) {
+        return sendError(
+          res,
+          400,
+          "VALIDATION_ERROR",
+          "Review note must be 1000 characters or fewer"
+        );
+      }
+
       const submission = await CertificateSubmissionModel.findById(id);
 
       if (!submission) {
@@ -141,33 +152,51 @@ router.post(
         );
       }
 
-      submission.status = "rejected";
-      submission.mintState = "unprepared";
-      submission.mintDraft = null;
-      submission.reviewNote = reviewNote?.trim() || undefined;
-      submission.reviewedAt = new Date();
-      submission.auditTrail = [
-        ...(submission.auditTrail ?? []),
-        createAuditTrailEvent({
-          type: "submission_rejected",
-          title: "Submission rejected",
-          description:
-            reviewNote?.trim() ||
-            "The certificate submission was rejected during reviewer review.",
-          actorAddress: req.user?.address,
-          metadata: {
+      const rejectedSubmission = await CertificateSubmissionModel.findOneAndUpdate(
+        {
+          _id: id,
+          status: "pending_review",
+        },
+        {
+          $set: {
             status: "rejected",
+            mintState: "unprepared",
+            mintDraft: null,
+            reviewNote: normalizedReviewNote || undefined,
+            reviewedAt: new Date(),
           },
-        }),
-      ];
-      await submission.save();
+          $push: {
+            auditTrail: createAuditTrailEvent({
+              type: "submission_rejected",
+              title: "Submission rejected",
+              description:
+                normalizedReviewNote ||
+                "The certificate submission was rejected during reviewer review.",
+              actorAddress: req.user?.address,
+              metadata: {
+                status: "rejected",
+              },
+            }),
+          },
+        },
+        { new: true }
+      );
+
+      if (!rejectedSubmission) {
+        return sendError(
+          res,
+          409,
+          "ALREADY_PROCESSED",
+          "Submission was already processed by another request"
+        );
+      }
 
       console.info(
         `[Submission Rejected] id=${id} reviewer=${req.user?.address ?? "unknown"}`
       );
 
       return sendSuccess(res, {
-        submission: toSubmissionResponse(submission.toObject()),
+        submission: toSubmissionResponse(rejectedSubmission.toObject()),
       });
     } catch (error) {
       return handleServerError(res, error, "Could not reject submission");

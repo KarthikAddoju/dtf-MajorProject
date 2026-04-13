@@ -2,19 +2,42 @@ import { Router } from "express";
 import { toAuditTrailResponse } from "../lib/audit";
 import { sendError, sendSuccess, handleServerError } from "../lib/api";
 import { buildCredentialExports } from "../lib/credentialExports";
+import { getBlockchainReadiness } from "../lib/blockchainReadiness";
 import { CertificateSubmissionModel } from "../models/CertificateSubmission";
 import {
   eduAddress,
   mintControllerAddress,
   poctAddress,
   poctReadContract,
-  provider,
   getVerificationStatusLabel,
 } from "../services/blockchain";
 import { buildIpfsGatewayUrl, fetchJsonFromIPFS } from "../services/ipfs";
 
 const router = Router();
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN ?? "http://localhost:3000";
+
+function isMissingCertificateError(error: unknown) {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const code = "code" in error && typeof error.code === "string" ? error.code : null;
+  const message =
+    "message" in error && typeof error.message === "string"
+      ? error.message.toLowerCase()
+      : "";
+  const shortMessage =
+    "shortMessage" in error && typeof error.shortMessage === "string"
+      ? error.shortMessage.toLowerCase()
+      : "";
+  const combinedMessage = `${message} ${shortMessage}`;
+
+  return (
+    code === "CALL_EXCEPTION" ||
+    combinedMessage.includes("token does not exist") ||
+    combinedMessage.includes("nonexistent token")
+  );
+}
 
 router.get("/:tokenId", async (req, res) => {
   try {
@@ -30,6 +53,20 @@ router.get("/:tokenId", async (req, res) => {
     }
 
     const tokenIdValue = BigInt(tokenId);
+    const blockchainReadiness = await getBlockchainReadiness();
+
+    if (
+      blockchainReadiness.status !== "connected" ||
+      !blockchainReadiness.contractsReady ||
+      blockchainReadiness.chainId === null
+    ) {
+      return sendError(
+        res,
+        503,
+        "BLOCKCHAIN_UNAVAILABLE",
+        "The active chain is unavailable or the configured contracts are not deployed on it yet."
+      );
+    }
 
     let owner: string;
     let certificate: {
@@ -50,7 +87,16 @@ router.get("/:tokenId", async (req, res) => {
       verificationStatus = getVerificationStatusLabel(
         await poctReadContract.credentialStatus(tokenIdValue)
       );
-    } catch {
+    } catch (error) {
+      if (!isMissingCertificateError(error)) {
+        return sendError(
+          res,
+          503,
+          "BLOCKCHAIN_UNAVAILABLE",
+          "The active chain is unavailable or the configured contracts are not deployed on it yet."
+        );
+      }
+
       return sendError(
         res,
         404,
@@ -75,7 +121,6 @@ router.get("/:tokenId", async (req, res) => {
       }
     }
 
-    const network = await provider.getNetwork();
     const issuedAt = new Date(Number(certificate.issuedAt) * 1000).toISOString();
     const expiresAt =
       Number(certificate.expiresAt) > 0
@@ -126,7 +171,7 @@ router.get("/:tokenId", async (req, res) => {
       auditTrail: (submission?.auditTrail ?? []).map(toAuditTrailResponse),
       publicProof,
       proof: {
-        chainId: Number(network.chainId),
+        chainId: blockchainReadiness.chainId,
         poctAddress,
         eduAddress,
         mintControllerAddress,

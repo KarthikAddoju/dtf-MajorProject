@@ -78,7 +78,7 @@ export function CertificateCard({
 
       <div className="flex items-center gap-2">
         <button
-          onClick={onView}
+          onClick={() => onView?.()}
           className="flex-1 px-4 py-2 text-sm font-medium text-white bg-white/10 border border-white/10 rounded-lg hover:bg-white/20 transition-colors duration-200"
         >
           View Certificate
@@ -86,13 +86,13 @@ export function CertificateCard({
         {variant === "pending" && (
           <>
             <button
-              onClick={onApprove}
+              onClick={() => onApprove?.()}
               className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-500 transition-colors duration-200"
             >
               Approve
             </button>
             <button
-              onClick={onReject}
+              onClick={() => onReject?.()}
               className="px-4 py-2 text-sm font-medium text-white bg-red-600/80 rounded-lg hover:bg-red-500 transition-colors duration-200"
             >
               Reject

@@ -11,6 +11,7 @@ import {
   mintControllerAbi,
   mintControllerAddress,
   parseDualMintReceipt,
+  poctReadContract,
   provider,
 } from "../services/blockchain";
 import { createAuditTrailEvent } from "../lib/audit";
@@ -24,6 +25,117 @@ import {
 
 const router = Router();
 const mintControllerInterface = new ethers.Interface(mintControllerAbi);
+
+router.post(
+  "/reset-stale-mints",
+  authenticate,
+  authorize("admin"),
+  async (req: AuthRequest, res) => {
+    try {
+      if (!req.user) {
+        return sendError(res, 401, "UNAUTHORIZED", "You must be signed in");
+      }
+
+      await provider.getBlockNumber();
+
+      const mintedSubmissions = await CertificateSubmissionModel.find({
+        status: "minted",
+        tokenId: {
+          $exists: true,
+          $ne: null,
+        },
+      })
+        .select("_id tokenId")
+        .lean();
+
+      const resetSubmissionIds: string[] = [];
+      const resetTokenIds: string[] = [];
+
+      for (const submission of mintedSubmissions) {
+        const tokenId = typeof submission.tokenId === "string" ? submission.tokenId : null;
+
+        if (!tokenId) {
+          continue;
+        }
+
+        let tokenExists = true;
+
+        try {
+          await poctReadContract.ownerOf(BigInt(tokenId));
+        } catch {
+          tokenExists = false;
+        }
+
+        if (tokenExists) {
+          continue;
+        }
+
+        const resetResult = await CertificateSubmissionModel.findOneAndUpdate(
+          {
+            _id: submission._id,
+            status: "minted",
+            tokenId,
+          },
+          {
+            $set: {
+              status: "pending_review",
+              mintState: "unprepared",
+              mintDraft: null,
+              publicProofCid: null,
+              publicProofPayload: null,
+              claimsRoot: null,
+              claimSet: null,
+              tokenId: null,
+              txHash: null,
+              verifierAddress: null,
+              mintedAt: null,
+              verificationStatus: null,
+              revokedAt: null,
+              revocationReason: null,
+              revocationReasonHash: null,
+              eduAmountWei: null,
+              reviewedAt: null,
+            },
+            $push: {
+              auditTrail: createAuditTrailEvent({
+                type: "submission_reset",
+                title: "Stale mint reset after local chain restart",
+                description:
+                  "Admin reset a minted submission whose token no longer exists on the active chain so it can be reviewed and minted again.",
+                actorAddress: req.user.address,
+                metadata: {
+                  previousStatus: "minted",
+                  previousTokenId: tokenId,
+                  resetReason: "stale_chain_restart",
+                },
+              }),
+            },
+          },
+          { new: true }
+        );
+
+        if (!resetResult) {
+          continue;
+        }
+
+        resetSubmissionIds.push(String(resetResult._id));
+        resetTokenIds.push(tokenId);
+      }
+
+      return sendSuccess(res, {
+        resetCount: resetSubmissionIds.length,
+        resetSubmissionIds,
+        resetTokenIds,
+      });
+    } catch (error) {
+      return handleServerError(
+        res,
+        error,
+        "Could not reset stale minted submissions"
+      );
+    }
+  }
+);
 
 function parseExpiryDate(value: unknown) {
   if (value === undefined || value === null || value === "") {
@@ -525,7 +637,7 @@ router.post(
               metadata: {
                 tokenId: mintedLog.tokenId,
                 txHash,
-                eduAmount: submission.eduAmount ?? 0,
+                eduAmount: mintDraft.eduAmount,
                 verificationStatus: newVerificationStatus,
               },
             }),

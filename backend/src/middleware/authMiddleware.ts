@@ -30,7 +30,9 @@ export const authenticate = (
   }
 
   try {
-    const decoded = jwt.verify(token, runtimeConfig.jwtSecret);
+    const decoded = jwt.verify(token, runtimeConfig.jwtSecret, {
+      algorithms: ["HS256"],
+    });
 
     if (
       typeof decoded === "string" ||

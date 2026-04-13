@@ -14,6 +14,7 @@ import type {
   MintSubmissionInput,
   PlatformHealth,
   PrepareMintResult,
+  ResetStaleMintsResult,
   RevocationResult,
   Submission,
   UploadSubmissionInput,
@@ -44,6 +45,8 @@ interface RequestOptions {
   headers?: Record<string, string>
   signal?: AbortSignal
 }
+
+const DEFAULT_API_TIMEOUT_MS = 30_000
 
 export class ApiError extends Error {
   status: number
@@ -99,6 +102,52 @@ function buildHeaders(token?: string | null, headers?: Record<string, string>) {
   }
 }
 
+async function fetchWithTimeout(
+  input: string,
+  init: RequestInit,
+  timeoutMs = DEFAULT_API_TIMEOUT_MS
+) {
+  const timeoutController = new AbortController()
+  const callerSignal = init.signal
+  let timedOut = false
+
+  const forwardAbort = () => {
+    timeoutController.abort(callerSignal?.reason)
+  }
+
+  if (callerSignal) {
+    if (callerSignal.aborted) {
+      timeoutController.abort(callerSignal.reason)
+    } else {
+      callerSignal.addEventListener("abort", forwardAbort, { once: true })
+    }
+  }
+
+  const timeoutId = globalThis.setTimeout(() => {
+    timedOut = true
+    timeoutController.abort()
+  }, timeoutMs)
+
+  try {
+    return await fetch(input, {
+      ...init,
+      signal: timeoutController.signal,
+    })
+  } catch (error) {
+    if (timedOut) {
+      throw new ApiError("Request timed out — check your connection and try again", {
+        status: 408,
+        code: "REQUEST_TIMEOUT",
+      })
+    }
+
+    throw error
+  } finally {
+    globalThis.clearTimeout(timeoutId)
+    callerSignal?.removeEventListener("abort", forwardAbort)
+  }
+}
+
 async function parseApiResponse<T>(
   response: Response,
   fallbackMessage: string
@@ -134,7 +183,7 @@ async function apiRequest<T>(
   }: RequestOptions = {}
 ): Promise<T> {
   const hasJsonBody = body !== undefined && !(body instanceof FormData)
-  const response = await fetch(buildBackendUrl(pathname), {
+  const response = await fetchWithTimeout(buildBackendUrl(pathname), {
     method,
     headers: buildHeaders(token, {
       ...(hasJsonBody ? { "Content-Type": "application/json" } : {}),
@@ -149,7 +198,7 @@ async function apiRequest<T>(
 }
 
 export async function requestAuthChallenge(address: string) {
-  return apiRequest<{ message: string; expiresAt: number }>("/api/auth/challenge", {
+  return apiRequest<{ nonce: string; expiresAt: number }>("/api/auth/challenge", {
     method: "POST",
     body: { address },
   })
@@ -286,6 +335,13 @@ export async function finalizeMintSubmission(
   )
 }
 
+export async function resetStaleMints(token: string) {
+  return apiRequest<ResetStaleMintsResult>("/api/reviews/reset-stale-mints", {
+    method: "POST",
+    token,
+  })
+}
+
 export async function finalizeCredentialRevocation(
   token: string,
   tokenId: string,
@@ -359,7 +415,7 @@ export async function fetchEvidenceBlob(
     signal?: AbortSignal
   }
 ) {
-  const response = await fetch(
+  const response = await fetchWithTimeout(
     buildBackendUrl(
       `/api/evidence/${submissionId}${options?.download ? "?download=1" : ""}`
     ),
@@ -382,7 +438,7 @@ export async function analyseEvidence(
   token: string,
   submissionId: string
 ): Promise<AiInsight> {
-  const response = await fetch(
+  const response = await fetchWithTimeout(
     buildBackendUrl(`/api/evidence/${submissionId}/analyse`),
     {
       method: "POST",
@@ -416,15 +472,24 @@ export async function uploadCertificate(
     request.responseType = "text"
     request.setRequestHeader("Authorization", `Bearer ${token}`)
 
-    request.upload.addEventListener("progress", (event) => {
+    const handleProgress = (event: ProgressEvent<EventTarget>) => {
       if (!event.lengthComputable) {
         return
       }
 
       onProgress?.(Math.round((event.loaded / event.total) * 100))
-    })
+    }
 
-    request.addEventListener("load", () => {
+    const cleanup = () => {
+      request.upload.removeEventListener("progress", handleProgress)
+      request.removeEventListener("load", handleLoad)
+      request.removeEventListener("error", handleError)
+      request.removeEventListener("timeout", handleTimeout)
+    }
+
+    const handleLoad = () => {
+      cleanup()
+
       try {
         const rawResponse = typeof request.response === "string"
           ? request.response
@@ -464,25 +529,32 @@ export async function uploadCertificate(
           })
         )
       }
-    })
+    }
 
-    request.addEventListener("error", () => {
+    const handleError = () => {
+      cleanup()
       reject(
         new ApiError("Could not reach the backend upload service", {
           status: 0,
           code: "NETWORK_ERROR",
         })
       )
-    })
+    }
 
-    request.addEventListener("timeout", () => {
+    const handleTimeout = () => {
+      cleanup()
       reject(
         new ApiError("Upload timed out — check your connection and try again", {
           status: 0,
           code: "UPLOAD_TIMEOUT",
         })
       )
-    })
+    }
+
+    request.upload.addEventListener("progress", handleProgress)
+    request.addEventListener("load", handleLoad)
+    request.addEventListener("error", handleError)
+    request.addEventListener("timeout", handleTimeout)
 
     request.timeout = 120_000
     request.send(formData)

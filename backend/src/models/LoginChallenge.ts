@@ -9,7 +9,7 @@ const loginChallengeSchema = new Schema(
       lowercase: true,
       index: true,
     },
-    message: {
+    nonce: {
       type: String,
       required: true,
       trim: true,

@@ -9,6 +9,20 @@ const IPFS_GATEWAY_BASE_URLS = [
   "https://dweb.link/ipfs",
 ] as const;
 
+function extractIpfsHash(payload: unknown) {
+  if (
+    !payload ||
+    typeof payload !== "object" ||
+    !("IpfsHash" in payload) ||
+    typeof (payload as { IpfsHash?: unknown }).IpfsHash !== "string" ||
+    !(payload as { IpfsHash: string }).IpfsHash.trim()
+  ) {
+    throw new Error("Pinata response did not include a valid IpfsHash");
+  }
+
+  return (payload as { IpfsHash: string }).IpfsHash;
+}
+
 export async function uploadToIPFS(filePath: string) {
   const pinataJwt = runtimeConfig.pinataJwt;
 
@@ -33,7 +47,7 @@ export async function uploadToIPFS(filePath: string) {
     }
   );
 
-  return res.data.IpfsHash;
+  return extractIpfsHash(res.data);
 }
 
 export async function uploadJsonToIPFS(payload: Record<string, unknown>) {
@@ -58,7 +72,7 @@ export async function uploadJsonToIPFS(payload: Record<string, unknown>) {
     }
   );
 
-  return response.data.IpfsHash as string;
+  return extractIpfsHash(response.data);
 }
 
 export function buildIpfsGatewayUrl(cid: string) {

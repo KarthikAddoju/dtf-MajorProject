@@ -52,8 +52,18 @@ export function createMockResponse() {
   const response = {
     statusCode: 200,
     body: null as unknown,
+    headers: {} as Record<string, string>,
+    contentType: null as string | null,
     status(code: number) {
       response.statusCode = code;
+      return response;
+    },
+    setHeader(name: string, value: string) {
+      response.headers[name] = value;
+      return response;
+    },
+    type(value: string) {
+      response.contentType = value;
       return response;
     },
     json(payload: unknown) {
@@ -69,5 +79,7 @@ export function createMockResponse() {
   return response as Response & {
     statusCode: number;
     body: unknown;
+    headers: Record<string, string>;
+    contentType: string | null;
   };
 }

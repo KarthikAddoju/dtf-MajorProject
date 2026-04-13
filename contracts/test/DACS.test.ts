@@ -8,6 +8,9 @@ import type { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signer
 const INSTITUTE_HASH = ethers.keccak256(
   ethers.toUtf8Bytes("DACS_INSTITUTE:TEST")
 );
+const SECOND_INSTITUTE_HASH = ethers.keccak256(
+  ethers.toUtf8Bytes("DACS_INSTITUTE:SECOND")
+);
 const CLAIMS_ROOT = ethers.keccak256(ethers.toUtf8Bytes("test-claims-root"));
 const PROOF_CID = "QmTestProofCID123456";
 const REASON = "Policy violation";
@@ -224,6 +227,191 @@ describe("DACS Contracts", function () {
   // ─── MintController ──────────────────────────────────────────────────────
 
   describe("MintController", function () {
+    describe("verifier role accounting", function () {
+      it("grants verifier and revocation roles on the first institute approval", async function () {
+        const verifierRole = await controller.VERIFIER_ROLE();
+        const revocationRole = await controller.REVOCATION_ROLE();
+
+        expect(await controller.hasRole(verifierRole, verifier.address)).to.equal(
+          false
+        );
+        expect(
+          await controller.hasRole(revocationRole, verifier.address)
+        ).to.equal(false);
+
+        await controller.setInstituteVerifier(
+          INSTITUTE_HASH,
+          verifier.address,
+          true
+        );
+
+        expect(await controller.hasRole(verifierRole, verifier.address)).to.equal(
+          true
+        );
+        expect(
+          await controller.hasRole(revocationRole, verifier.address)
+        ).to.equal(true);
+      });
+
+      it("keeps role accounting idempotent when the same institute is re-approved", async function () {
+        const verifierRole = await controller.VERIFIER_ROLE();
+        const revocationRole = await controller.REVOCATION_ROLE();
+
+        await controller.setInstituteVerifier(
+          INSTITUTE_HASH,
+          verifier.address,
+          true
+        );
+        await controller.setInstituteVerifier(
+          INSTITUTE_HASH,
+          verifier.address,
+          true
+        );
+        await controller.setInstituteVerifier(
+          INSTITUTE_HASH,
+          verifier.address,
+          false
+        );
+
+        expect(await controller.hasRole(verifierRole, verifier.address)).to.equal(
+          false
+        );
+        expect(
+          await controller.hasRole(revocationRole, verifier.address)
+        ).to.equal(false);
+      });
+
+      it("keeps roles active when one of two approved institutes is removed", async function () {
+        const verifierRole = await controller.VERIFIER_ROLE();
+        const revocationRole = await controller.REVOCATION_ROLE();
+
+        await controller.setInstituteVerifier(
+          INSTITUTE_HASH,
+          verifier.address,
+          true
+        );
+        await controller.setInstituteVerifier(
+          SECOND_INSTITUTE_HASH,
+          verifier.address,
+          true
+        );
+        await controller.setInstituteVerifier(
+          INSTITUTE_HASH,
+          verifier.address,
+          false
+        );
+
+        expect(await controller.hasRole(verifierRole, verifier.address)).to.equal(
+          true
+        );
+        expect(
+          await controller.hasRole(revocationRole, verifier.address)
+        ).to.equal(true);
+        expect(
+          await controller.instituteVerifiers(SECOND_INSTITUTE_HASH, verifier.address)
+        ).to.equal(true);
+      });
+
+      it("revokes verifier and revocation roles from a non-admin after the last approval is removed", async function () {
+        const verifierRole = await controller.VERIFIER_ROLE();
+        const revocationRole = await controller.REVOCATION_ROLE();
+
+        await controller.setInstituteVerifier(
+          INSTITUTE_HASH,
+          verifier.address,
+          true
+        );
+        await controller.setInstituteVerifier(
+          INSTITUTE_HASH,
+          verifier.address,
+          false
+        );
+
+        expect(await controller.hasRole(verifierRole, verifier.address)).to.equal(
+          false
+        );
+        expect(
+          await controller.hasRole(revocationRole, verifier.address)
+        ).to.equal(false);
+      });
+
+      it("does not auto-revoke reviewer or revocation roles from the admin", async function () {
+        const verifierRole = await controller.VERIFIER_ROLE();
+        const revocationRole = await controller.REVOCATION_ROLE();
+
+        await controller.setInstituteVerifier(
+          INSTITUTE_HASH,
+          owner.address,
+          true
+        );
+        await controller.setInstituteVerifier(
+          INSTITUTE_HASH,
+          owner.address,
+          false
+        );
+
+        expect(await controller.hasRole(verifierRole, owner.address)).to.equal(
+          true
+        );
+        expect(await controller.hasRole(revocationRole, owner.address)).to.equal(
+          true
+        );
+      });
+
+      it("blocks minting and revocation for a verifier after institute deauthorization", async function () {
+        await controller.setInstituteVerifier(
+          INSTITUTE_HASH,
+          verifier.address,
+          true
+        );
+
+        const mintTx = await controller
+          .connect(verifier)
+          .dualMint(
+            student.address,
+            PROOF_CID,
+            CLAIMS_ROOT,
+            INSTITUTE_HASH,
+            EDU_AMOUNT,
+            NO_EXPIRY
+          );
+        const mintReceipt = await mintTx.wait();
+        const mintEvent = mintReceipt?.logs
+          .map((log) => {
+            try {
+              return controller.interface.parseLog(log);
+            } catch {
+              return null;
+            }
+          })
+          .find((event) => event?.name === "DualMinted");
+        const tokenId = mintEvent?.args?.poctTokenId as bigint;
+
+        await controller.setInstituteVerifier(
+          INSTITUTE_HASH,
+          verifier.address,
+          false
+        );
+
+        await expect(
+          controller
+            .connect(verifier)
+            .dualMint(
+              student.address,
+              PROOF_CID,
+              CLAIMS_ROOT,
+              INSTITUTE_HASH,
+              EDU_AMOUNT,
+              NO_EXPIRY
+            )
+        ).to.be.reverted;
+
+        await expect(
+          controller.connect(verifier).revokeCredential(tokenId, REASON_HASH)
+        ).to.be.reverted;
+      });
+    });
+
     describe("access control", function () {
       it("blocks dualMint from non-verifier", async function () {
         await expect(

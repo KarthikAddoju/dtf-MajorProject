@@ -1,7 +1,9 @@
 "use client"
 
 import { ethers } from "ethers"
-import { type FormEvent, useEffect, useMemo, useState } from "react"
+import Image from "next/image"
+import { type FormEvent, useEffect, useMemo, useRef, useState } from "react"
+import { toast } from "sonner"
 import { AuditTrailList } from "@/components/AuditTrailList"
 import { DashboardCard } from "@/components/DashboardCard"
 import { DestructiveActionModal } from "@/components/DestructiveActionModal"
@@ -20,11 +22,13 @@ import {
   fetchEvidenceBlob,
   fetchManageInstitutes,
   fetchPendingSubmissions,
+  fetchPlatformHealth,
   finalizeCredentialRevocation,
   finalizeMintSubmission,
   isAbortError,
   prepareMintSubmission,
   rejectSubmission,
+  resetStaleMints,
   updateInstitute,
 } from "@/lib/api"
 import { ensureInstituteVerifierAuthorization, submitCredentialRevocation, submitDualMint } from "@/lib/contracts/mint-controller"
@@ -34,8 +38,8 @@ import {
   formatDateTime,
   truncateValue,
 } from "@/lib/formatting"
-import { connectWallet } from "@/lib/wallet"
-import type { AiInsight, Institute, Submission } from "@/lib/types"
+import { areWalletAddressesEqual, connectWallet } from "@/lib/wallet"
+import type { AiInsight, Institute, PlatformHealth, Submission } from "@/lib/types"
 
 interface ReviewDraft {
   eduAmount: string
@@ -233,6 +237,7 @@ export default function AdminPage() {
   const [reviewDrafts, setReviewDrafts] = useState<Record<string, ReviewDraft>>({})
   const [isLoading, setIsLoading] = useState(false)
   const [isCreatingInstitute, setIsCreatingInstitute] = useState(false)
+  const [isResettingStaleMints, setIsResettingStaleMints] = useState(false)
   const [processingSubmissionId, setProcessingSubmissionId] = useState<string | null>(
     null
   )
@@ -249,6 +254,7 @@ export default function AdminPage() {
   const [selectedEvidencePreviewUrl, setSelectedEvidencePreviewUrl] = useState<string | null>(
     null
   )
+  const [platformHealth, setPlatformHealth] = useState<PlatformHealth | null>(null)
   const [refreshNonce, setRefreshNonce] = useState(0)
   const [reviewFieldErrors, setReviewFieldErrors] = useState<
     Record<string, { eduAmount?: string }>
@@ -262,6 +268,15 @@ export default function AdminPage() {
   const [touchedInstituteFields, setTouchedInstituteFields] = useState({
     name: false,
     shortCode: false,
+  })
+  const queueHotkeyStateRef = useRef<{
+    submissions: Submission[]
+    selectedIndex: number
+    isEnabled: boolean
+  }>({
+    submissions: [],
+    selectedIndex: -1,
+    isEnabled: false,
   })
 
   useEffect(() => {
@@ -309,6 +324,7 @@ export default function AdminPage() {
       setPendingSubmissions([])
       setAllSubmissions([])
       setInstitutes([])
+      setPlatformHealth(null)
       return
     }
 
@@ -318,13 +334,16 @@ export default function AdminPage() {
     async function loadAdminData() {
       try {
         setIsLoading(true)
-        const [pendingResponse, submissionsResponse, institutesResponse] =
+        const [pendingResponse, submissionsResponse, institutesResponse, healthResponse] =
           await Promise.all([
             fetchPendingSubmissions(authToken, controller.signal),
             fetchAllSubmissions(authToken, controller.signal),
             user?.role === "admin"
               ? fetchManageInstitutes(authToken, controller.signal)
               : Promise.resolve({ institutes: [] }),
+            user?.role === "admin"
+              ? fetchPlatformHealth(controller.signal).catch(() => null)
+              : Promise.resolve(null),
           ])
 
         if (controller.signal.aborted) {
@@ -334,11 +353,13 @@ export default function AdminPage() {
         setPendingSubmissions(pendingResponse.submissions)
         setAllSubmissions(submissionsResponse.submissions)
         setInstitutes(institutesResponse.institutes)
+        setPlatformHealth(healthResponse)
       } catch (error) {
         if (controller.signal.aborted || isAbortError(error)) {
           return
         }
 
+        setPlatformHealth(null)
         const message =
           error instanceof Error ? error.message : "Could not load admin data"
         setConsoleStatus({
@@ -357,6 +378,48 @@ export default function AdminPage() {
 
     return () => controller.abort()
   }, [refreshNonce, token, user?.role])
+
+  async function handleResetStaleMints() {
+    if (!token || user?.role !== "admin") {
+      return
+    }
+
+    setIsResettingStaleMints(true)
+
+    try {
+      const result = await resetStaleMints(token)
+      const message =
+        result.resetCount > 0
+          ? `Reset ${result.resetCount} stale minted submission${result.resetCount === 1 ? "" : "s"} so they can be minted again on the current chain.`
+          : "No stale minted submissions were found on the active chain."
+
+      setConsoleStatus({
+        tone: result.resetCount > 0 ? "success" : "info",
+        title: result.resetCount > 0 ? "Stale mints reset" : "No stale mints found",
+        message,
+      })
+
+      if (result.resetCount > 0) {
+        toast.success(message)
+      } else {
+        toast(message)
+      }
+
+      setRefreshNonce((value) => value + 1)
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Could not reset stale minted submissions"
+
+      setConsoleStatus({
+        tone: "error",
+        title: "Stale mint reset failed",
+        message,
+      })
+      toast.error(message)
+    } finally {
+      setIsResettingStaleMints(false)
+    }
+  }
 
   async function handleApprove(submission: Submission) {
     if (!token || !user) {
@@ -411,7 +474,7 @@ export default function AdminPage() {
       })
       const wallet = await connectWallet()
 
-      if (wallet.address !== user.address) {
+      if (!areWalletAddressesEqual(wallet.address, user.address)) {
         throw new Error(
           "The connected wallet does not match the signed reviewer session. Reconnect with the same wallet you authenticated with."
         )
@@ -471,6 +534,7 @@ export default function AdminPage() {
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Could not open the private evidence file"
+      toast.error(message)
       setConsoleStatus({
         tone: "error",
         title: "Evidence unavailable",
@@ -562,7 +626,7 @@ export default function AdminPage() {
     try {
       const wallet = await connectWallet()
 
-      if (wallet.address !== user.address) {
+      if (!areWalletAddressesEqual(wallet.address, user.address)) {
         throw new Error(
           "The connected wallet does not match the signed reviewer session. Reconnect with the same wallet you authenticated with."
         )
@@ -767,6 +831,14 @@ export default function AdminPage() {
         (submission) => submission.id === selectedSubmission.id
       )
     : -1
+  useEffect(() => {
+    queueHotkeyStateRef.current = {
+      submissions: filteredPendingSubmissions,
+      selectedIndex: selectedSubmissionIndex,
+      isEnabled: user?.role === "admin" || user?.role === "verifier",
+    }
+  }, [filteredPendingSubmissions, selectedSubmissionIndex, user?.role])
+
   const selectedDraft = selectedSubmission
     ? reviewDrafts[selectedSubmission.id] ?? {
         eduAmount: selectedSubmission.eduAmount?.toString() ?? "100",
@@ -816,6 +888,67 @@ export default function AdminPage() {
       }
     }
   }, [selectedSubmission, token])
+  const missingContracts = useMemo(() => {
+    if (!platformHealth) {
+      return [] as string[]
+    }
+
+    return [
+      !platformHealth.contracts.poctDeployed ? "PoCT" : null,
+      !platformHealth.contracts.eduDeployed ? "EDU" : null,
+      !platformHealth.contracts.mintControllerDeployed ? "Mint Controller" : null,
+    ].filter((value): value is string => Boolean(value))
+  }, [platformHealth])
+  const chainRecoveryNeeded =
+    user?.role === "admin" &&
+    !!platformHealth &&
+    (platformHealth.services.blockchain.status !== "connected" ||
+      !platformHealth.services.blockchain.contractsReady)
+  const recoveryBannerTone: "neutral" | "warning" = !platformHealth
+    ? "neutral"
+    : chainRecoveryNeeded
+      ? "warning"
+      : "neutral"
+  const recoveryBannerTitle = !platformHealth
+    ? "Demo recovery tools ready"
+    : chainRecoveryNeeded
+      ? "Chain recovery needed"
+      : "Chain health confirmed"
+  const recoveryBannerMessage = !platformHealth
+    ? "Platform health details are temporarily unavailable. If Hardhat was restarted, redeploy the contracts, restart the backend, clear MetaMask activity for the demo wallets, then use Reset Stale Mints before reminting."
+    : chainRecoveryNeeded
+      ? [
+          platformHealth.services.blockchain.chainId !== null
+            ? `Chain ${platformHealth.services.blockchain.chainId} is reachable`
+            : "The backend cannot currently reach the configured RPC endpoint",
+          missingContracts.length > 0
+            ? `but the configured contract code is missing for ${missingContracts.join(", ")}.`
+            : "but the configured deployment is not healthy yet.",
+          "Redeploy the contracts, restart the backend, clear MetaMask activity for the demo wallets, then run Reset Stale Mints before reminting.",
+        ].join(" ")
+      : `Chain ${platformHealth.services.blockchain.chainId ?? "unknown"} is responding and the configured contracts are deployed. If Hardhat restarts during the demo, redeploy the contracts, restart the backend, clear MetaMask activity, then use Reset Stale Mints before reminting.`
+  const configuredContracts = platformHealth
+    ? [
+        {
+          label: "PoCT",
+          address: platformHealth.contracts.poctAddress,
+          deployed: platformHealth.contracts.poctDeployed,
+        },
+        {
+          label: "EDU",
+          address: platformHealth.contracts.eduAddress,
+          deployed: platformHealth.contracts.eduDeployed,
+        },
+        {
+          label: "Mint Controller",
+          address: platformHealth.contracts.mintControllerAddress,
+          deployed: platformHealth.contracts.mintControllerDeployed,
+        },
+      ]
+    : []
+  const configuredContractsHint = chainRecoveryNeeded
+    ? "If these addresses do not match the latest deploy:sync output, restart the backend before using Reset Stale Mints."
+    : "These are the contract addresses currently loaded by the backend for the active demo session."
   const canSelectPrevious = selectedSubmissionIndex > 0
   const canSelectNext =
     selectedSubmissionIndex >= 0 &&
@@ -840,11 +973,13 @@ export default function AdminPage() {
   }
 
   useEffect(() => {
-    if (!selectedSubmission || (user?.role !== "admin" && user?.role !== "verifier")) {
-      return
-    }
-
     const handleKeyDown = (event: KeyboardEvent) => {
+      const { submissions, selectedIndex, isEnabled } = queueHotkeyStateRef.current
+
+      if (!isEnabled || selectedIndex < 0) {
+        return
+      }
+
       const target = event.target
 
       if (
@@ -860,8 +995,8 @@ export default function AdminPage() {
       if (event.key === "[") {
         event.preventDefault()
         const previousSubmission =
-          selectedSubmissionIndex > 0
-            ? filteredPendingSubmissions[selectedSubmissionIndex - 1]
+          selectedIndex > 0
+            ? submissions[selectedIndex - 1]
             : null
 
         if (previousSubmission) {
@@ -872,9 +1007,8 @@ export default function AdminPage() {
       if (event.key === "]") {
         event.preventDefault()
         const nextSubmission =
-          selectedSubmissionIndex >= 0 &&
-          selectedSubmissionIndex < filteredPendingSubmissions.length - 1
-            ? filteredPendingSubmissions[selectedSubmissionIndex + 1]
+          selectedIndex < submissions.length - 1
+            ? submissions[selectedIndex + 1]
             : null
 
         if (nextSubmission) {
@@ -886,12 +1020,7 @@ export default function AdminPage() {
     window.addEventListener("keydown", handleKeyDown)
 
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [
-    filteredPendingSubmissions,
-    selectedSubmission,
-    selectedSubmissionIndex,
-    user?.role,
-  ])
+  }, [])
 
   return (
     <PageLayout>
@@ -994,6 +1123,85 @@ export default function AdminPage() {
             reward, optionally add expiry, and submit the mint from your wallet.
             Public proof artifacts publish automatically after approval.
           </div>
+
+          {user.role === "admin" ? (
+            <div className="mb-8 space-y-4">
+              <StatusBanner
+                tone={recoveryBannerTone}
+                title={recoveryBannerTitle}
+                message={recoveryBannerMessage}
+                action={
+                  <button
+                    type="button"
+                    onClick={() => void handleResetStaleMints()}
+                    disabled={isResettingStaleMints}
+                    className={`rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                      chainRecoveryNeeded
+                        ? "border border-amber-400/30 bg-amber-400/10 text-amber-100 hover:bg-amber-400/15"
+                        : "border border-white/15 bg-white/[0.06] text-white hover:bg-white/[0.1]"
+                    }`}
+                  >
+                    {isResettingStaleMints ? "Resetting..." : "Reset Stale Mints"}
+                  </button>
+                }
+              />
+
+              {platformHealth ? (
+                <div
+                  className={`rounded-xl border px-5 py-4 ${
+                    chainRecoveryNeeded
+                      ? "border-amber-500/25 bg-amber-500/10"
+                      : "border-white/[0.10] bg-white/[0.04]"
+                  }`}
+                >
+                  <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#cbd5f5]">
+                        Configured Contracts
+                      </div>
+                      <p className="mt-1 text-sm leading-6 text-[#c5cad7]">
+                        {configuredContractsHint}
+                      </p>
+                    </div>
+                    <div
+                      className={`rounded-full border px-3 py-1 text-[11px] font-medium uppercase tracking-[0.12em] ${
+                        chainRecoveryNeeded
+                          ? "border-amber-400/30 bg-amber-400/10 text-amber-100"
+                          : "border-white/10 bg-white/[0.05] text-[#d7dceb]"
+                      }`}
+                    >
+                      Chain {platformHealth.services.blockchain.chainId ?? "unknown"}
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    {configuredContracts.map((contract) => (
+                      <div
+                        key={contract.label}
+                        className="rounded-lg border border-white/8 bg-black/10 px-4 py-3"
+                      >
+                        <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="text-sm font-semibold text-white">{contract.label}</div>
+                          <div
+                            className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] ${
+                              contract.deployed
+                                ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-200"
+                                : "border-amber-400/30 bg-amber-400/10 text-amber-100"
+                            }`}
+                          >
+                            {contract.deployed ? "Code Found" : "Code Missing"}
+                          </div>
+                        </div>
+                        <div className="break-all rounded-md bg-black/20 px-3 py-2 font-mono text-xs leading-6 text-[#dbe4ff]">
+                          {contract.address}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
 
           {consoleStatus ? (
             <StatusBanner
@@ -1479,10 +1687,12 @@ export default function AdminPage() {
                       ) : selectedEvidencePreviewUrl &&
                         selectedSubmission.mimeType.startsWith("image/") ? (
                         <div className="relative h-[420px] overflow-hidden rounded-xl bg-slate-950">
-                          <img
+                          <Image
                             src={selectedEvidencePreviewUrl}
                             alt={selectedSubmission.courseName}
-                            className="h-full w-full object-contain"
+                            fill
+                            unoptimized
+                            className="object-contain"
                           />
                         </div>
                       ) : (

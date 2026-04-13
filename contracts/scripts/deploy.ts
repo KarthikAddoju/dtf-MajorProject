@@ -66,6 +66,17 @@ async function main() {
   console.log("Admin address:", adminAddress);
   console.log("Initial verifier:", initialVerifierAddress, "\n");
 
+  if (adminAddress.toLowerCase() !== deployer.address.toLowerCase()) {
+    throw new Error(
+      [
+        "Automatic institute verifier bootstrap requires MULTISIG_ADMIN_ADDRESS to match the deployer wallet.",
+        `Configured admin: ${adminAddress}`,
+        `Deployer wallet: ${deployer.address}`,
+        "Unset MULTISIG_ADMIN_ADDRESS for the localhost demo or redeploy from the configured admin wallet.",
+      ].join("\n")
+    );
+  }
+
   // Deploy PoCT
   const PoCT = await ethers.getContractFactory("PoCT");
   const poct = await PoCT.deploy();
@@ -93,17 +104,11 @@ async function main() {
   await poct.setMintController(controllerAddress);
   await edu.setMintController(controllerAddress);
 
-  if (adminAddress.toLowerCase() === deployer.address.toLowerCase()) {
-    for (const shortCode of instituteShortCodes) {
-      await controller.setInstituteVerifier(
-        buildInstituteHash(shortCode),
-        initialVerifierAddress,
-        true
-      );
-    }
-  } else {
-    console.log(
-      "Skipping automatic institute verifier bootstrap because the configured admin is not the deployer."
+  for (const shortCode of instituteShortCodes) {
+    await controller.setInstituteVerifier(
+      buildInstituteHash(shortCode),
+      initialVerifierAddress,
+      true
     );
   }
 

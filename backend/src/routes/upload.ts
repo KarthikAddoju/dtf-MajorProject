@@ -27,6 +27,7 @@ const ALLOWED_MIME_TYPES = new Set([
   "image/png",
   "image/jpeg",
   "image/jpg",
+  "image/webp",
 ]);
 
 const upload = multer({

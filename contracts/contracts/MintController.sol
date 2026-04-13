@@ -34,6 +34,7 @@ contract MintController is AccessControl {
     IEDUToken public eduToken;
 
     mapping(bytes32 => mapping(address => bool)) public instituteVerifiers;
+    mapping(address => uint256) private verifierApprovalCounts;
 
     event InstituteVerifierUpdated(
         bytes32 indexed instituteHash,
@@ -80,9 +81,31 @@ contract MintController is AccessControl {
         require(instituteHash != bytes32(0), "MintController: institute hash is zero");
         require(verifier != address(0), "MintController: verifier is zero address");
 
-        if (approved) {
-            _grantRole(VERIFIER_ROLE, verifier);
-            _grantRole(REVOCATION_ROLE, verifier);
+        bool wasApproved = instituteVerifiers[instituteHash][verifier];
+
+        if (!wasApproved && approved) {
+            uint256 nextApprovalCount = verifierApprovalCounts[verifier] + 1;
+            verifierApprovalCounts[verifier] = nextApprovalCount;
+
+            if (nextApprovalCount == 1) {
+                _grantRole(VERIFIER_ROLE, verifier);
+                _grantRole(REVOCATION_ROLE, verifier);
+            }
+        } else if (wasApproved && !approved) {
+            uint256 currentApprovalCount = verifierApprovalCounts[verifier];
+            uint256 nextApprovalCount = currentApprovalCount > 0
+                ? currentApprovalCount - 1
+                : 0;
+
+            verifierApprovalCounts[verifier] = nextApprovalCount;
+
+            if (
+                nextApprovalCount == 0 &&
+                !hasRole(VERIFIER_ADMIN_ROLE, verifier)
+            ) {
+                _revokeRole(VERIFIER_ROLE, verifier);
+                _revokeRole(REVOCATION_ROLE, verifier);
+            }
         }
 
         instituteVerifiers[instituteHash][verifier] = approved;

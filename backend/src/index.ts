@@ -16,6 +16,7 @@ import reviewRoutes from "./routes/reviews";
 import credentialRoutes from "./routes/credentials";
 import evidenceRoutes from "./routes/evidence";
 import { sendError } from "./lib/api";
+import { getBlockchainReadiness } from "./lib/blockchainReadiness";
 import { seedDefaultInstitutes } from "./services/seed";
 import { runtimeConfig } from "./config/runtime";
 
@@ -125,7 +126,25 @@ process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 mongoose.connect(runtimeConfig.mongodbUri)
 .then(async () => {
   await seedDefaultInstitutes();
+  const blockchainReadiness = await getBlockchainReadiness();
   console.log("MongoDB Connected");
+
+  if (blockchainReadiness.status === "connected") {
+    console.log(
+      `[Startup] Blockchain ready on chain ${blockchainReadiness.chainId} at block ${blockchainReadiness.blockNumber}.`
+    );
+  } else {
+    console.warn(
+      `[Startup Warning] Blockchain readiness is degraded. ${blockchainReadiness.warnings.join(" ")}`
+    );
+    console.warn("=".repeat(88));
+    console.warn("🚨 DACS blockchain is not demo-ready yet.");
+    console.warn("Fix it with:");
+    console.warn("  1. cd contracts && npm run deploy:sync");
+    console.warn("  2. Restart the backend server");
+    console.warn('  3. Recheck GET /api/health until services.blockchain.status is "connected"');
+    console.warn("=".repeat(88));
+  }
 
   app.listen(runtimeConfig.port, () => {
     console.log(`Server running on port ${runtimeConfig.port}`);

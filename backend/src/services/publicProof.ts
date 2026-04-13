@@ -33,6 +33,33 @@ export function buildPreparedPublicProof(
   };
   const merkleTree = buildMerkleTree(claimSet);
   const publicProofPayload = {
+    "@context": [
+      "https://www.w3.org/2018/credentials/v1",
+      "https://purl.imsglobal.org/spec/ob/v3p0/context.json"
+    ],
+    type: ["VerifiableCredential", "OpenBadgeCredential"],
+    id: `urn:uuid:${input.evidenceHash.replace("0x", "").slice(0, 36)}`,
+    issuer: {
+      id: `urn:dacs:institute:${input.instituteHash}`,
+      type: "Profile",
+      name: input.instituteName,
+    },
+    issuanceDate: new Date().toISOString(),
+    credentialSubject: {
+      id: `urn:dacs:student:${input.studentAddress}`,
+      achievement: {
+        id: `urn:dacs:achievement:${input.instituteShortCode}-${input.credentialType}`,
+        type: "Achievement",
+        name: input.courseName,
+        description: `Successfully awarded the ${input.credentialType} on the DACS ledger.`,
+      }
+    },
+    evidence: [{
+      id: `urn:dacs:evidence:${input.evidenceHash}`,
+      type: "DocumentVerification",
+      name: "Encrypted Course Material",
+      narrative: "Evidence resides off-chain in encrypted form.",
+    }],
     version: "1.0",
     proofType: "DACS_PUBLIC_PROOF",
     courseName: input.courseName,

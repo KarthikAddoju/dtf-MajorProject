@@ -9,6 +9,8 @@ import { uniqueWalletAddresses } from "../lib/institutes";
 import { toSubmissionResponse } from "../lib/submissionResponses";
 
 const router = Router();
+const MAX_INSTITUTE_NAME_LENGTH = 120;
+const MAX_INSTITUTE_SHORT_CODE_LENGTH = 16;
 
 function toInstituteResponse(institute: {
   _id: unknown;
@@ -244,12 +246,34 @@ router.post("/", authenticate, authorize("admin"), async (req: AuthRequest, res)
       );
     }
 
+    const trimmedName = name.trim();
     const normalizedShortCode = shortCode.trim().toUpperCase();
-    const instituteSlug = slugify(name);
+
+    if (trimmedName.length > MAX_INSTITUTE_NAME_LENGTH) {
+      return sendError(
+        res,
+        400,
+        "VALIDATION_ERROR",
+        `Institute name must be ${MAX_INSTITUTE_NAME_LENGTH} characters or fewer`,
+        { name: `Use ${MAX_INSTITUTE_NAME_LENGTH} characters or fewer` }
+      );
+    }
+
+    if (normalizedShortCode.length > MAX_INSTITUTE_SHORT_CODE_LENGTH) {
+      return sendError(
+        res,
+        400,
+        "VALIDATION_ERROR",
+        `Institute short code must be ${MAX_INSTITUTE_SHORT_CODE_LENGTH} characters or fewer`,
+        { shortCode: `Use ${MAX_INSTITUTE_SHORT_CODE_LENGTH} characters or fewer` }
+      );
+    }
+
+    const instituteSlug = slugify(trimmedName);
 
     const existingInstitute = await InstituteModel.findOne({
       $or: [
-        { name: name.trim() },
+        { name: trimmedName },
         { slug: instituteSlug },
         { shortCode: normalizedShortCode },
       ],
@@ -265,7 +289,7 @@ router.post("/", authenticate, authorize("admin"), async (req: AuthRequest, res)
     }
 
     const institute = await InstituteModel.create({
-      name: name.trim(),
+      name: trimmedName,
       slug: instituteSlug,
       shortCode: normalizedShortCode,
       isActive: true,
@@ -316,14 +340,43 @@ router.patch("/:id", authenticate, authorize("admin"), async (req, res) => {
       );
     }
 
+    const trimmedName = name?.trim();
+    const normalizedShortCode = shortCode?.trim().toUpperCase();
+
+    if (
+      trimmedName !== undefined &&
+      trimmedName.length > MAX_INSTITUTE_NAME_LENGTH
+    ) {
+      return sendError(
+        res,
+        400,
+        "VALIDATION_ERROR",
+        `Institute name must be ${MAX_INSTITUTE_NAME_LENGTH} characters or fewer`,
+        { name: `Use ${MAX_INSTITUTE_NAME_LENGTH} characters or fewer` }
+      );
+    }
+
+    if (
+      normalizedShortCode !== undefined &&
+      normalizedShortCode.length > MAX_INSTITUTE_SHORT_CODE_LENGTH
+    ) {
+      return sendError(
+        res,
+        400,
+        "VALIDATION_ERROR",
+        `Institute short code must be ${MAX_INSTITUTE_SHORT_CODE_LENGTH} characters or fewer`,
+        { shortCode: `Use ${MAX_INSTITUTE_SHORT_CODE_LENGTH} characters or fewer` }
+      );
+    }
+
     const institute = await InstituteModel.findById(id);
 
     if (!institute) {
       return sendError(res, 404, "INSTITUTE_NOT_FOUND", "Institute not found");
     }
 
-    const nextName = name?.trim() || institute.name;
-    const nextShortCode = shortCode?.trim().toUpperCase() || institute.shortCode;
+    const nextName = trimmedName || institute.name;
+    const nextShortCode = normalizedShortCode || institute.shortCode;
     const nextSlug = slugify(nextName);
 
     const conflictingInstitute = await InstituteModel.findOne({

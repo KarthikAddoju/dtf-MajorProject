@@ -2,12 +2,7 @@ import { Router } from "express";
 import mongoose from "mongoose";
 import { sendSuccess } from "../lib/api";
 import { runtimeConfig } from "../config/runtime";
-import {
-  eduAddress,
-  mintControllerAddress,
-  poctAddress,
-  provider,
-} from "../services/blockchain";
+import { getBlockchainReadiness } from "../lib/blockchainReadiness";
 
 const router = Router();
 
@@ -29,26 +24,10 @@ router.get("/", async (_req, res) => {
   const databaseState = getDatabaseStateLabel(mongoose.connection.readyState);
   const ipfsConfigured = runtimeConfig.pinataJwt !== null;
   const authConfigured = runtimeConfig.jwtSecret.trim().length > 0;
-
-  let blockchainStatus: "connected" | "degraded" = "degraded";
-  let chainId: number | null = null;
-  let blockNumber: number | null = null;
-
-  try {
-    const [network, latestBlock] = await Promise.all([
-      provider.getNetwork(),
-      provider.getBlockNumber(),
-    ]);
-
-    blockchainStatus = "connected";
-    chainId = Number(network.chainId);
-    blockNumber = latestBlock;
-  } catch {
-    blockchainStatus = "degraded";
-  }
+  const blockchainReadiness = await getBlockchainReadiness();
 
   const overallStatus =
-    databaseState === "connected" && blockchainStatus === "connected"
+    databaseState === "connected" && blockchainReadiness.status === "connected"
       ? "ok"
       : "degraded";
 
@@ -64,9 +43,10 @@ router.get("/", async (_req, res) => {
         state: databaseState,
       },
       blockchain: {
-        status: blockchainStatus,
-        chainId,
-        blockNumber,
+        status: blockchainReadiness.status,
+        chainId: blockchainReadiness.chainId,
+        blockNumber: blockchainReadiness.blockNumber,
+        contractsReady: blockchainReadiness.contractsReady,
       },
       ipfs: {
         status: ipfsConfigured ? "configured" : "missing",
@@ -81,11 +61,7 @@ router.get("/", async (_req, res) => {
             : "warning",
       },
     },
-    contracts: {
-      poctAddress,
-      eduAddress,
-      mintControllerAddress,
-    },
+    contracts: blockchainReadiness.contracts,
   });
 });
 

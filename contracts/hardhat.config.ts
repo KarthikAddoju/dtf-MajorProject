@@ -21,8 +21,26 @@ subtask(TASK_COMPILE_SOLIDITY_GET_SOLC_BUILD).setAction(
   }
 );
 
+import * as dotenv from "dotenv";
+dotenv.config();
+
+const PRIVATE_KEY = process.env.PRIVATE_KEY || "0x0000000000000000000000000000000000000000000000000000000000000000";
+
 const config: HardhatUserConfig = {
   solidity: localSolcVersion,
+  networks: {
+    sepolia: {
+      url: process.env.SEPOLIA_RPC_URL || "",
+      accounts: [PRIVATE_KEY],
+    },
+    amoy: {
+      url: process.env.AMOY_RPC_URL || "",
+      accounts: [PRIVATE_KEY],
+    },
+  },
+  etherscan: {
+    apiKey: process.env.ETHERSCAN_API_KEY,
+  },
 };
 
 export default config;

@@ -10,11 +10,14 @@ import {
 import { toast } from "sonner"
 import { fetchCurrentUser, requestAuthChallenge, verifyAuthChallenge } from "@/lib/api"
 import {
+  areWalletAddressesEqual,
   connectWallet,
   getConnectedWallet,
   hasInjectedWalletProvider,
   isSupportedChainId,
   isWalletActionRejected,
+  normalizeWalletAddress,
+  tryNormalizeWalletAddress,
   WalletConnectionError,
 } from "@/lib/wallet"
 import type { AuthFlowState, AuthUser } from "@/lib/types"
@@ -40,8 +43,11 @@ const TOKEN_STORAGE_KEY = "dacs.auth.token"
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
-function normalizeAddress(address: string) {
-  return address.toLowerCase()
+function normalizeAuthUser(user: AuthUser): AuthUser {
+  return {
+    ...user,
+    address: normalizeWalletAddress(user.address),
+  }
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -87,11 +93,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return
         }
 
-        const { user: restoredUser } = await fetchCurrentUser(storedToken)
+        const { user: fetchedUser } = await fetchCurrentUser(storedToken)
+        const restoredUser = normalizeAuthUser(fetchedUser)
 
         if (
           wallet?.address &&
-          normalizeAddress(restoredUser.address) !== normalizeAddress(wallet.address)
+          !areWalletAddressesEqual(restoredUser.address, wallet.address)
         ) {
           window.localStorage.removeItem(TOKEN_STORAGE_KEY)
 
@@ -142,13 +149,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const nextAccounts = Array.isArray(accounts) ? accounts : []
       const nextAddress =
         typeof nextAccounts[0] === "string"
-          ? normalizeAddress(nextAccounts[0])
+          ? tryNormalizeWalletAddress(nextAccounts[0])
           : null
 
       setConnectedWalletAddress(nextAddress)
       setWalletNote(null)
 
-      if (user?.address && nextAddress && user.address !== nextAddress) {
+      if (
+        user?.address &&
+        nextAddress &&
+        !areWalletAddressesEqual(user.address, nextAddress)
+      ) {
         window.localStorage.removeItem(TOKEN_STORAGE_KEY)
         setToken(null)
         setUser(null)
@@ -159,7 +170,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return
       }
 
-      if (user?.address && nextAddress && user.address === nextAddress) {
+      if (
+        user?.address &&
+        nextAddress &&
+        areWalletAddressesEqual(user.address, nextAddress)
+      ) {
         setAuthFlowState("authenticated")
         setWalletWarning(null)
         return
@@ -178,6 +193,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const handleChainChanged = () => {
       getConnectedWallet()
         .then((wallet) => {
+          if (cancelled) {
+            return
+          }
+
           setChainId(wallet?.chainId ?? null)
           setAuthFlowState(
             wallet?.address ? (user?.address ? "authenticated" : "wallet_connected") : "idle"
@@ -190,6 +209,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           )
         })
         .catch(() => {
+          if (cancelled) {
+            return
+          }
+
           setWalletWarning("Could not refresh wallet network status.")
         })
     }
@@ -217,13 +240,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setConnectedWalletAddress(wallet.address)
       setChainId(wallet.chainId)
       setAuthFlowState("awaiting_signature")
-      const { message } = await requestAuthChallenge(wallet.address)
-      const signature = await wallet.signer.signMessage(message)
-      const verified = await verifyAuthChallenge(wallet.address, message, signature)
-      const nextUser = {
+      const { nonce } = await requestAuthChallenge(wallet.address)
+      
+      const { SiweMessage } = await import("siwe");
+      const siweMessage = new SiweMessage({
+        domain: window.location.host,
+        address: wallet.address,
+        statement: "Sign in with Ethereum to the DACS App.",
+        uri: window.location.origin,
+        version: "1",
+        chainId: wallet.chainId,
+        nonce,
+      });
+      const messageToSign = siweMessage.prepareMessage();
+
+      const signature = await wallet.signer.signMessage(messageToSign)
+      const verified = await verifyAuthChallenge(wallet.address, messageToSign, signature)
+      const nextUser = normalizeAuthUser({
         address: verified.address,
         role: verified.role,
-      } satisfies AuthUser
+      } satisfies AuthUser)
 
       window.localStorage.setItem(TOKEN_STORAGE_KEY, verified.token)
       setToken(verified.token)

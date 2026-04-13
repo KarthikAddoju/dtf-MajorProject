@@ -82,7 +82,11 @@ function formatDate(value: string | null) {
   }).format(new Date(value))
 }
 
-function truncateValue(value: string, start = 10, end = 8) {
+function truncateValue(value?: string | null, start = 10, end = 8) {
+  if (!value) {
+    return "Not available"
+  }
+
   if (value.length <= start + end) {
     return value
   }

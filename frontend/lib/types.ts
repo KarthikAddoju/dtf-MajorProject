@@ -6,6 +6,7 @@ export type AuditTrailEventType =
   | "submission_rejected"
   | "submission_minted"
   | "submission_revoked"
+  | "submission_reset"
 
 export interface AuditTrailEvent {
   id: string
@@ -20,6 +21,12 @@ export interface AuditTrailEvent {
 export interface AuthUser {
   address: string
   role: UserRole
+}
+
+export interface ResetStaleMintsResult {
+  resetCount: number
+  resetSubmissionIds: string[]
+  resetTokenIds: string[]
 }
 
 export type VerificationStatus = "active" | "expired" | "revoked"
@@ -222,6 +229,7 @@ export interface PlatformHealth {
       status: "connected" | "degraded"
       chainId: number | null
       blockNumber: number | null
+      contractsReady: boolean
     }
     ipfs: {
       status: "configured" | "missing"
@@ -235,8 +243,11 @@ export interface PlatformHealth {
   }
   contracts: {
     poctAddress: string
+    poctDeployed: boolean
     eduAddress: string
+    eduDeployed: boolean
     mintControllerAddress: string
+    mintControllerDeployed: boolean
   }
 }
 

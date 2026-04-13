@@ -63,9 +63,11 @@ router.get("/:submissionId", authenticate, async (req: AuthRequest, res) => {
       req.query.download === "1" ? "attachment" : "inline";
 
     res.setHeader("Cache-Control", "private, no-store");
+    const safeFileName = submission.fileName.replace(/["\r\n]/g, "");
+
     res.setHeader(
       "Content-Disposition",
-      `${disposition}; filename="${submission.fileName.replace(/"/g, "")}"`
+      `${disposition}; filename="${safeFileName}"`
     );
     res.type(submission.mimeType);
     return res.send(evidenceBuffer);

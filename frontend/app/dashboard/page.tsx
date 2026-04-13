@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { useEffect, useRef, useState } from "react"
+import { toast } from "sonner"
 import { CredentialTimeline } from "@/components/CredentialTimeline"
 import { DashboardCard } from "@/components/DashboardCard"
 import { EmptyStatePanel } from "@/components/EmptyStatePanel"
@@ -204,23 +205,69 @@ export default function DashboardPage() {
 
     setIsPolling(true)
 
-    const intervalId = setInterval(async () => {
-      if (!hasPendingRef.current) {
-        clearInterval(intervalId)
+    let timeoutId: number | null = null
+    let activeController: AbortController | null = null
+    let cancelled = false
+
+    const scheduleNextPoll = () => {
+      if (cancelled || !hasPendingRef.current) {
         setIsPolling(false)
         return
       }
-      try {
-        const controller = new AbortController()
-        const response = await fetchMySubmissions(token, controller.signal)
-        setSubmissions(response.submissions)
-      } catch {
-        // Silently ignore poll failures
+
+      timeoutId = window.setTimeout(() => {
+        void poll()
+      }, 30_000)
+    }
+
+    const poll = async () => {
+      if (cancelled || !hasPendingRef.current) {
+        setIsPolling(false)
+        return
       }
-    }, 30_000)
+
+      const controller = new AbortController()
+      activeController = controller
+
+      try {
+        const response = await fetchMySubmissions(token, controller.signal)
+
+        if (cancelled || controller.signal.aborted) {
+          return
+        }
+
+        const nextHasPending = response.submissions.some(
+          (submission) => submission.status === "pending_review"
+        )
+
+        setSubmissions(response.submissions)
+
+        if (nextHasPending) {
+          scheduleNextPoll()
+        } else {
+          setIsPolling(false)
+        }
+      } catch (error) {
+        if (cancelled || isAbortError(error)) {
+          return
+        }
+
+        scheduleNextPoll()
+      } finally {
+        if (activeController === controller) {
+          activeController = null
+        }
+      }
+    }
+
+    scheduleNextPoll()
 
     return () => {
-      clearInterval(intervalId)
+      cancelled = true
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId)
+      }
+      activeController?.abort()
       setIsPolling(false)
     }
   }, [token, user, isAuthenticated])
@@ -300,11 +347,13 @@ export default function DashboardPage() {
     try {
       await openPrivateEvidence(token, submission.id, submission.fileName)
     } catch (error) {
-      setDataWarning(
+      const message =
         error instanceof Error
           ? error.message
           : "Could not open the private evidence file"
-      )
+
+      setDataWarning(message)
+      toast.error(message)
     }
   }
 

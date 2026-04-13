@@ -227,7 +227,8 @@ const certificateSubmissionSchema = new Schema(
     tokenId: {
       type: String,
       trim: true,
-      index: true,
+      unique: true,
+      sparse: true,
     },
     txHash: {
       type: String,

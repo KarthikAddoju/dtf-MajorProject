@@ -1,4 +1,5 @@
 import { ReactNode } from "react"
+import { motion } from "framer-motion"
 
 interface DashboardCardProps {
   title?: string
@@ -8,7 +9,11 @@ interface DashboardCardProps {
 
 export function DashboardCard({ title, children, className = "" }: DashboardCardProps) {
   return (
-    <div className={`brand-panel brand-card-hover ${className}`}>
+    <motion.div 
+      whileHover={{ scale: 1.01, y: -2 }}
+      transition={{ type: "spring", stiffness: 300, damping: 20 }}
+      className={`brand-panel brand-card-hover ${className}`}
+    >
       {title && (
         <div className="border-b border-white/[0.06] px-6 py-5">
           <div className="mb-1 text-[11px] text-[#666666]">
@@ -20,6 +25,6 @@ export function DashboardCard({ title, children, className = "" }: DashboardCard
         </div>
       )}
       <div className="relative p-6">{children}</div>
-    </div>
+    </motion.div>
   )
 }

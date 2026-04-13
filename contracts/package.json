@@ -4,6 +4,8 @@
   "main": "index.js",
   "scripts": {
     "compile": "HOME=$PWD npx hardhat compile",
+    "devnet:start": "node scripts/devnet-start.mjs",
+    "devnet:reset": "node scripts/devnet-reset.mjs",
     "deploy": "HOME=$PWD npx hardhat run scripts/deploy.ts",
     "deploy:local": "HOME=$PWD npx hardhat run scripts/deploy.ts --network localhost",
     "sync:env": "node scripts/sync-env.mjs",

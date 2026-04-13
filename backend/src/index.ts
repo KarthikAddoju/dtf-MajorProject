@@ -140,9 +140,10 @@ mongoose.connect(runtimeConfig.mongodbUri)
     console.warn("=".repeat(88));
     console.warn("🚨 DACS blockchain is not demo-ready yet.");
     console.warn("Fix it with:");
-    console.warn("  1. cd contracts && npm run deploy:sync");
-    console.warn("  2. Restart the backend server");
-    console.warn('  3. Recheck GET /api/health until services.blockchain.status is "connected"');
+    console.warn("  1. cd contracts && npm run devnet:start");
+    console.warn("  2. If this is a fresh-chain reset, run npm run deploy:sync");
+    console.warn("  3. Restart the backend server");
+    console.warn('  4. Recheck GET /api/health until services.blockchain.status is "connected"');
     console.warn("=".repeat(88));
   }
 

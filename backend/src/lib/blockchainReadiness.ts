@@ -35,7 +35,7 @@ export async function getBlockchainReadiness(): Promise<BlockchainReadiness> {
 
   if (networkResult.status !== "fulfilled" || blockNumberResult.status !== "fulfilled") {
     warnings.push(
-      "Could not reach the configured RPC endpoint. Start Hardhat or confirm RPC_URL is correct."
+      "Could not reach the configured RPC endpoint. Start the local devnet or confirm RPC_URL is correct."
     );
 
     return {

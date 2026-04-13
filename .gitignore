@@ -50,6 +50,10 @@ backend/private-evidence/
 *.tsbuildinfo
 .turbo/
 .playwright-cli/
+.claude/
+frontend/playwright-report/
+frontend/test-results/
+contracts/.local/
 
 # Mac / editor files
 .DS_Store

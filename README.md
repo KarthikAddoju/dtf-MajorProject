@@ -13,6 +13,7 @@ Implemented in this codebase:
 - Student dashboard with EDU balance, owned credentials, and submission history
 - Public college index showing total EDU minted per institute
 - Hardhat deploy artifact export and env sync for backend/frontend
+- Persistent local devnet launcher for restart-safe demo state
 - Soulbound-like PoCT NFT transfer blocking after mint
 
 Still intentionally out of scope for this version:
@@ -32,7 +33,7 @@ Still intentionally out of scope for this version:
 System roles:
 - MongoDB stores institute data and certificate workflow state
 - IPFS stores uploaded credential evidence files
-- Hardhat local chain stores PoCT ownership, verifier, timestamp, and EDU rewards
+- Local devnet stores PoCT ownership, verifier, timestamp, and EDU rewards
 
 ## Core Flow
 
@@ -51,6 +52,7 @@ System roles:
 
 - Node.js
 - MongoDB running locally
+- Foundry/Anvil available locally for the persistent demo chain
 - MetaMask installed
 - Pinata JWT for IPFS upload
 
@@ -72,13 +74,13 @@ JWT_SECRET=change-me
 MONGODB_URI=mongodb://127.0.0.1:27017/dtf
 ```
 
-### 3. Start Hardhat and Deploy Contracts
+### 3. Start the Persistent Local Devnet and Deploy Contracts
 
 Terminal 1:
 
 ```bash
 cd contracts
-npx hardhat node
+npm run devnet:start
 ```
 
 Terminal 2:
@@ -88,7 +90,9 @@ cd contracts
 npm run deploy:sync
 ```
 
-`npm run deploy:sync` deploys the contracts to the local Hardhat node and writes the latest contract addresses into:
+`npm run devnet:start` shells out to Anvil on `127.0.0.1:8545`, locks the chain id to `31337`, and persists chain state to `contracts/.local/anvil-state.json`.
+
+`npm run deploy:sync` deploys the contracts to the local devnet and writes the latest contract addresses into:
 - `backend/.env.local`
 - `frontend/.env.local`
 
@@ -131,13 +135,20 @@ Backend example:
 Frontend example:
 - `frontend/.env.example`
 
-Important operational rule:
-- Restarting Hardhat resets chain state, so rerun `npm run deploy:sync` after every restart.
+Important operational rules:
+- A normal `npm run devnet:start` restart preserves chain state through `contracts/.local/anvil-state.json`.
+- Do **not** rerun `npm run deploy:sync` after a normal devnet restart unless you intentionally want a fresh chain.
 
-If Hardhat is restarted during a live demo:
-1. Rerun `npm run deploy:sync`, then restart the backend so it picks up the fresh addresses.
-2. Clear MetaMask activity for the demo wallets to avoid nonce conflicts.
-3. Use the admin console `Reset stale mints` action before reminting any affected credentials.
+If the devnet process simply stops during a live demo:
+1. Restart it with `npm run devnet:start`.
+2. Restart the backend only if it lost RPC connectivity.
+3. Continue the demo — previously minted credentials should still verify.
+
+If you intentionally reset the devnet or start a fresh chain:
+1. Run `npm run devnet:reset` (or remove `contracts/.local/`) if you want a clean slate.
+2. Rerun `npm run deploy:sync`, then restart the backend so it picks up the fresh addresses.
+3. Clear MetaMask activity for the demo wallets to avoid nonce conflicts.
+4. Use the admin console `Reset stale mints` action before reminting any affected credentials.
 
 ## Validation Commands
 
@@ -193,6 +204,6 @@ Frontend:
 ## Known Constraints
 
 - This project is intentionally localhost-first for final demonstration reliability.
-- Hardhat state is ephemeral.
+- The persistent local devnet preserves state across normal restarts, but an explicit devnet reset starts a fresh chain.
 - The public verify page is tokenId-first, not CID-first.
 - Institute affiliation is stored off-chain in MongoDB.

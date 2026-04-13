@@ -622,7 +622,7 @@ export default function DashboardPage() {
               className="mb-8"
               tone="warning"
               title="Stale credential records detected"
-              message={`${staleTokenIds.size} minted submission${staleTokenIds.size > 1 ? "s" : ""} in your history (token${staleTokenIds.size > 1 ? "s" : ""} ${[...staleTokenIds].map((id) => `#${id}`).join(", ")}) no longer exist on the current chain. This usually means the local Hardhat network was restarted. Proof-sheet links for these records have been disabled. Mint a fresh credential to restore a live proof sheet.`}
+              message={`${staleTokenIds.size} minted submission${staleTokenIds.size > 1 ? "s" : ""} in your history (token${staleTokenIds.size > 1 ? "s" : ""} ${[...staleTokenIds].map((id) => `#${id}`).join(", ")}) no longer exist on the current chain. This usually means the persistent local devnet was intentionally reset or a different fresh chain is now active. Proof-sheet links for these records stay disabled until an admin clears the stale mint record and the credential is minted again on the current chain.`}
             />
           ) : null}
 

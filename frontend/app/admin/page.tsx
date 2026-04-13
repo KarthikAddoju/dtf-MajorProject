@@ -915,7 +915,7 @@ export default function AdminPage() {
       ? "Chain recovery needed"
       : "Chain health confirmed"
   const recoveryBannerMessage = !platformHealth
-    ? "Platform health details are temporarily unavailable. If Hardhat was restarted, redeploy the contracts, restart the backend, clear MetaMask activity for the demo wallets, then use Reset Stale Mints before reminting."
+    ? "Platform health details are temporarily unavailable. Start the local devnet if it is down. If the devnet was intentionally reset or a fresh chain is now active, rerun deploy:sync, restart the backend, clear MetaMask activity for the demo wallets, then use Reset Stale Mints before reminting."
     : chainRecoveryNeeded
       ? [
           platformHealth.services.blockchain.chainId !== null
@@ -924,9 +924,9 @@ export default function AdminPage() {
           missingContracts.length > 0
             ? `but the configured contract code is missing for ${missingContracts.join(", ")}.`
             : "but the configured deployment is not healthy yet.",
-          "Redeploy the contracts, restart the backend, clear MetaMask activity for the demo wallets, then run Reset Stale Mints before reminting.",
+          "Start the persistent devnet if it is down. If this is a fresh-chain reset, rerun deploy:sync, restart the backend, clear MetaMask activity for the demo wallets, then run Reset Stale Mints before reminting.",
         ].join(" ")
-      : `Chain ${platformHealth.services.blockchain.chainId ?? "unknown"} is responding and the configured contracts are deployed. If Hardhat restarts during the demo, redeploy the contracts, restart the backend, clear MetaMask activity, then use Reset Stale Mints before reminting.`
+      : `Chain ${platformHealth.services.blockchain.chainId ?? "unknown"} is responding and the configured contracts are deployed. Normal devnet restarts should preserve previously minted credentials. Only rerun deploy:sync and use Reset Stale Mints after an intentional devnet reset or when starting a fresh chain.`
   const configuredContracts = platformHealth
     ? [
         {
@@ -947,7 +947,7 @@ export default function AdminPage() {
       ]
     : []
   const configuredContractsHint = chainRecoveryNeeded
-    ? "If these addresses do not match the latest deploy:sync output, restart the backend before using Reset Stale Mints."
+    ? "If these addresses do not match the latest deploy:sync output after a fresh-chain reset, restart the backend before using Reset Stale Mints."
     : "These are the contract addresses currently loaded by the backend for the active demo session."
   const canSelectPrevious = selectedSubmissionIndex > 0
   const canSelectNext =

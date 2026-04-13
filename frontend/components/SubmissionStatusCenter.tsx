@@ -123,7 +123,7 @@ export function SubmissionStatusCenter({
                       </h3>
                       <p className="mt-2 text-sm leading-6 text-[#a0a0a0]">
                         {isStale
-                          ? `Token #${notification.tokenId} is not present on the current chain. The local Hardhat network may have been restarted since this credential was minted.`
+                          ? `Token #${notification.tokenId} is not present on the current chain. The persistent local devnet was likely reset or replaced with a fresh chain after this credential was minted.`
                           : notification.message}
                       </p>
                     </div>

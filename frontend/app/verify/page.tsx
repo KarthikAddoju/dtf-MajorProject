@@ -289,7 +289,7 @@ function VerifyPageContent() {
       },
       {
         label: "Chain",
-        value: `Hardhat ${record.proof.chainId}`,
+        value: `Local devnet ${record.proof.chainId}`,
         accent: "text-[#a5c0f8]",
       },
       {
@@ -984,12 +984,13 @@ function VerifyPageContent() {
 
           {errorCode === "CERTIFICATE_NOT_FOUND" ? (
             <div className="rounded-xl border border-amber-500/20 bg-amber-500/06 p-4 text-sm">
-              <div className="font-semibold text-amber-200">Running a local Hardhat network?</div>
+              <div className="font-semibold text-amber-200">Using the persistent local devnet?</div>
               <p className="mt-1 text-[#a0a0a0]">
-                Restarting Hardhat resets the chain, so tokens from previous sessions no longer
-                exist on-chain. If your dashboard shows this token as &quot;minted&quot;, that record is
-                from MongoDB and is now stale. Mint a fresh credential after restart to get a
-                working proof sheet.
+                A normal devnet restart should preserve previously minted tokens. If this token is
+                missing, the devnet was likely intentionally reset or a fresh chain is now active.
+                If your dashboard still shows this token as &quot;minted&quot;, that MongoDB record is
+                stale. Ask an admin to run Reset Stale Mints, then mint a fresh credential on the
+                current chain to restore a working proof sheet.
               </p>
             </div>
           ) : null}

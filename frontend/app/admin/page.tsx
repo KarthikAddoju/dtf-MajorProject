@@ -119,6 +119,55 @@ function translateContractError(raw: string): string {
   return raw
 }
 
+function getMissingContractLabels(platformHealth: PlatformHealth | null) {
+  if (!platformHealth) {
+    return [] as string[]
+  }
+
+  return [
+    !platformHealth.contracts.poctDeployed ? "PoCT" : null,
+    !platformHealth.contracts.eduDeployed ? "EDU" : null,
+    !platformHealth.contracts.mintControllerDeployed ? "Mint Controller" : null,
+  ].filter((value): value is string => Boolean(value))
+}
+
+function isBlockchainWriteReady(platformHealth: PlatformHealth | null) {
+  return Boolean(
+    platformHealth &&
+      platformHealth.services.blockchain.status === "connected" &&
+      platformHealth.services.blockchain.contractsReady &&
+      platformHealth.services.blockchain.chainId !== null
+  )
+}
+
+function getBlockchainActionBlockedReason(platformHealth: PlatformHealth | null) {
+  if (!platformHealth) {
+    return "Platform health is temporarily unavailable. Retry after GET /api/health reports a connected blockchain."
+  }
+
+  const warning = platformHealth.services.blockchain.warnings[0]
+
+  if (warning) {
+    return `${warning} Retry after GET /api/health reports a connected blockchain.`
+  }
+
+  if (platformHealth.services.blockchain.chainId === null) {
+    return "The backend cannot currently reach the configured RPC endpoint. Start the local devnet and retry."
+  }
+
+  if (!platformHealth.services.blockchain.chainIdMatchesConfig) {
+    return `Observed chain ${platformHealth.services.blockchain.observedChainId ?? "unknown"} does not match expected chain ${platformHealth.services.blockchain.expectedChainId}. Restart the backend after resyncing the demo env files.`
+  }
+
+  const missingContracts = getMissingContractLabels(platformHealth)
+
+  if (missingContracts.length > 0) {
+    return `Configured contract code is missing for ${missingContracts.join(", ")} on chain ${platformHealth.services.blockchain.observedChainId ?? platformHealth.services.blockchain.chainId ?? "unknown"}.`
+  }
+
+  return "Blockchain write actions are temporarily unavailable."
+}
+
 function toDateTimeLocalValue(value: string | null) {
   if (!value) {
     return ""
@@ -341,7 +390,7 @@ export default function AdminPage() {
             user?.role === "admin"
               ? fetchManageInstitutes(authToken, controller.signal)
               : Promise.resolve({ institutes: [] }),
-            user?.role === "admin"
+            user?.role === "admin" || user?.role === "verifier"
               ? fetchPlatformHealth(controller.signal).catch(() => null)
               : Promise.resolve(null),
           ])
@@ -453,6 +502,13 @@ export default function AdminPage() {
         title: "Expiry date invalid",
         message: "Use a valid expiry date or leave the field blank.",
       })
+      setSelectedSubmissionId(submission.id)
+      return
+    }
+
+    const canPrepareMint = await confirmBlockchainActionReady("Prepare & Mint")
+
+    if (!canPrepareMint) {
       setSelectedSubmissionId(submission.id)
       return
     }
@@ -613,6 +669,12 @@ export default function AdminPage() {
     }
 
     const normalizedReason = (reason ?? "").trim() || "Credential revoked"
+
+    const canRevokeCredential = await confirmBlockchainActionReady("Revoke Credential")
+
+    if (!canRevokeCredential) {
+      return
+    }
 
     setConfirmModal(null)
     setProcessingSubmissionId(submission.id)
@@ -889,28 +951,22 @@ export default function AdminPage() {
     }
   }, [selectedSubmission, token])
   const missingContracts = useMemo(() => {
-    if (!platformHealth) {
-      return [] as string[]
-    }
-
-    return [
-      !platformHealth.contracts.poctDeployed ? "PoCT" : null,
-      !platformHealth.contracts.eduDeployed ? "EDU" : null,
-      !platformHealth.contracts.mintControllerDeployed ? "Mint Controller" : null,
-    ].filter((value): value is string => Boolean(value))
+    return getMissingContractLabels(platformHealth)
   }, [platformHealth])
+  const blockchainActionDisabledReason = useMemo(
+    () => getBlockchainActionBlockedReason(platformHealth),
+    [platformHealth]
+  )
+  const blockchainActionsBlocked =
+    (user?.role === "admin" || user?.role === "verifier") &&
+    Boolean(blockchainActionDisabledReason)
   const chainRecoveryNeeded =
-    user?.role === "admin" &&
-    !!platformHealth &&
-    (platformHealth.services.blockchain.status !== "connected" ||
-      !platformHealth.services.blockchain.contractsReady)
-  const recoveryBannerTone: "neutral" | "warning" = !platformHealth
-    ? "neutral"
-    : chainRecoveryNeeded
-      ? "warning"
-      : "neutral"
+    user?.role === "admin" && blockchainActionsBlocked
+  const recoveryBannerTone: "neutral" | "warning" = chainRecoveryNeeded
+    ? "warning"
+    : "neutral"
   const recoveryBannerTitle = !platformHealth
-    ? "Demo recovery tools ready"
+    ? "Platform health unavailable"
     : chainRecoveryNeeded
       ? "Chain recovery needed"
       : "Chain health confirmed"
@@ -970,6 +1026,43 @@ export default function AdminPage() {
     }
 
     setSelectedSubmissionId(nextSubmission.id)
+  }
+
+  async function confirmBlockchainActionReady(actionLabel: string) {
+    try {
+      const health = await fetchPlatformHealth()
+      setPlatformHealth(health)
+
+      const blockedReason = getBlockchainActionBlockedReason(health)
+
+      if (!blockedReason || isBlockchainWriteReady(health)) {
+        return true
+      }
+
+      setConsoleStatus({
+        tone: "error",
+        title: `${actionLabel} unavailable`,
+        message: blockedReason,
+      })
+      return false
+    } catch (error) {
+      if (isAbortError(error)) {
+        return false
+      }
+
+      setPlatformHealth(null)
+      const message =
+        error instanceof Error
+          ? error.message
+          : `Could not confirm blockchain health before ${actionLabel.toLowerCase()}.`
+
+      setConsoleStatus({
+        tone: "error",
+        title: `${actionLabel} unavailable`,
+        message,
+      })
+      return false
+    }
   }
 
   useEffect(() => {
@@ -1123,6 +1216,16 @@ export default function AdminPage() {
             reward, optionally add expiry, and submit the mint from your wallet.
             Public proof artifacts publish automatically after approval.
           </div>
+
+          {user.role === "verifier" && blockchainActionsBlocked ? (
+            <div className="mb-8">
+              <StatusBanner
+                tone="warning"
+                title="Blockchain actions paused"
+                message={blockchainActionDisabledReason ?? "Blockchain write actions are temporarily unavailable."}
+              />
+            </div>
+          ) : null}
 
           {user.role === "admin" ? (
             <div className="mb-8 space-y-4">
@@ -1564,7 +1667,8 @@ export default function AdminPage() {
                           <button
                             type="button"
                             onClick={() => void handleApprove(submission)}
-                            disabled={isProcessing}
+                            disabled={isProcessing || blockchainActionsBlocked}
+                            title={blockchainActionDisabledReason ?? undefined}
                             className="brand-button-primary px-4 py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                           >
                             {isProcessing ? "Processing..." : "Prepare & Mint"}
@@ -1757,7 +1861,11 @@ export default function AdminPage() {
                         <button
                           type="button"
                           onClick={() => void handleApprove(selectedSubmission)}
-                          disabled={processingSubmissionId === selectedSubmission.id}
+                          disabled={
+                            processingSubmissionId === selectedSubmission.id ||
+                            blockchainActionsBlocked
+                          }
+                          title={blockchainActionDisabledReason ?? undefined}
                           className="brand-button-primary px-4 py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           {processingSubmissionId === selectedSubmission.id
@@ -2033,7 +2141,11 @@ export default function AdminPage() {
                             <button
                               type="button"
                               onClick={() => void handleRevoke(submission)}
-                              disabled={processingSubmissionId === submission.id}
+                              disabled={
+                                processingSubmissionId === submission.id ||
+                                blockchainActionsBlocked
+                              }
+                              title={blockchainActionDisabledReason ?? undefined}
                               className="rounded-lg border border-fuchsia-500/30 bg-fuchsia-500/10 px-4 py-2 text-sm font-medium text-fuchsia-200 transition hover:bg-fuchsia-500/20 disabled:cursor-not-allowed disabled:opacity-60"
                             >
                               {processingSubmissionId === submission.id

@@ -9,6 +9,7 @@ const getTransactionReceiptMock = jest.fn();
 const getTransactionMock = jest.fn();
 const getBlockMock = jest.fn();
 const parseRevocationReceiptMock = jest.fn();
+const getBlockchainReadinessMock = jest.fn();
 
 jest.mock("../models/CertificateSubmission", () => ({
   CertificateSubmissionModel: {
@@ -27,6 +28,10 @@ jest.mock("../models/DisclosureRecord", () => ({
 
 jest.mock("../lib/reviewers", () => ({
   assertInstituteReviewerAccess: assertInstituteReviewerAccessMock,
+}));
+
+jest.mock("../lib/blockchainReadiness", () => ({
+  getBlockchainReadiness: getBlockchainReadinessMock,
 }));
 
 jest.mock("../services/blockchain", () => ({
@@ -70,6 +75,28 @@ function createSubmissionDoc(overrides: Partial<Record<string, unknown>> = {}) {
   return Object.assign(base, overrides);
 }
 
+function buildConnectedReadiness() {
+  return {
+    status: "connected" as const,
+    chainId: 31337,
+    observedChainId: 31337,
+    expectedChainId: 31337,
+    chainIdMatchesConfig: true,
+    persistentDevnet: true,
+    blockNumber: 123,
+    contractsReady: true,
+    warnings: [],
+    contracts: {
+      poctAddress: "0x0000000000000000000000000000000000000001",
+      poctDeployed: true,
+      eduAddress: "0x0000000000000000000000000000000000000002",
+      eduDeployed: true,
+      mintControllerAddress: "0x0000000000000000000000000000000000000003",
+      mintControllerDeployed: true,
+    },
+  };
+}
+
 describe("credential routes", () => {
   beforeEach(() => {
     findOneMock.mockReset();
@@ -79,7 +106,9 @@ describe("credential routes", () => {
     getTransactionMock.mockReset();
     getBlockMock.mockReset();
     parseRevocationReceiptMock.mockReset();
+    getBlockchainReadinessMock.mockReset();
     (assertInstituteReviewerAccessMock as any).mockResolvedValue(true);
+    (getBlockchainReadinessMock as any).mockResolvedValue(buildConnectedReadiness());
   });
 
   it("finalizes a revocation for a minted credential", async () => {
@@ -154,6 +183,46 @@ describe("credential routes", () => {
         }),
       })
     );
+  });
+
+  it("blocks revocation finalization while blockchain readiness is degraded", async () => {
+    (getBlockchainReadinessMock as any).mockResolvedValue({
+      ...buildConnectedReadiness(),
+      status: "degraded",
+      contractsReady: false,
+      warnings: ["Could not reach the configured RPC endpoint."],
+    });
+
+    const res = createMockResponse();
+    const handler = getRouteHandler(
+      credentialRoutes,
+      "post",
+      "/:tokenId/revoke/finalize"
+    );
+
+    await handler(
+      {
+        params: { tokenId: "7" },
+        body: { txHash: "0xrevoke" },
+        user: {
+          address: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          role: "verifier",
+        },
+      } as unknown as Request,
+      res
+    );
+
+    expect(res.statusCode).toBe(503);
+    expect(res.body).toEqual(
+      expect.objectContaining({
+        success: false,
+        error: expect.objectContaining({
+          code: "BLOCKCHAIN_UNAVAILABLE",
+        }),
+      })
+    );
+    expect(findOneMock).not.toHaveBeenCalled();
+    expect(getTransactionReceiptMock).not.toHaveBeenCalled();
   });
 
   it("blocks revocation when the submission is not currently minted", async () => {

@@ -1,7 +1,8 @@
-import { Router } from "express";
+import { Router, type Response } from "express";
 import { ethers } from "ethers";
 import { authenticate, authorize, type AuthRequest } from "../middleware/authMiddleware";
 import { sendError, sendSuccess, handleServerError } from "../lib/api";
+import { getBlockchainReadiness } from "../lib/blockchainReadiness";
 import { CertificateSubmissionModel } from "../models/CertificateSubmission";
 import {
   mintControllerAddress,
@@ -22,6 +23,33 @@ import { DisclosureRecordModel } from "../models/DisclosureRecord";
 const router = Router();
 const MAX_REVOCATION_REASON_LENGTH = 1000;
 const MAX_DISCLOSURE_AUDIENCE_LENGTH = 500;
+const BLOCKCHAIN_UNAVAILABLE_MESSAGE =
+  "The active chain is unavailable or the configured contracts are not deployed on it yet.";
+
+async function ensureBlockchainWriteReady(res: Response) {
+  const blockchainReadiness = await getBlockchainReadiness();
+
+  if (
+    blockchainReadiness.status === "connected" &&
+    blockchainReadiness.contractsReady &&
+    blockchainReadiness.chainId !== null
+  ) {
+    return true;
+  }
+
+  const detail = blockchainReadiness.warnings[0];
+
+  sendError(
+    res,
+    503,
+    "BLOCKCHAIN_UNAVAILABLE",
+    detail
+      ? `${detail} Retry after GET /api/health reports a connected blockchain.`
+      : BLOCKCHAIN_UNAVAILABLE_MESSAGE
+  );
+
+  return false;
+}
 
 /**
  * Lists saved selective-disclosure packages for the authenticated student.
@@ -106,6 +134,10 @@ router.post(
           "VALIDATION_ERROR",
           `Revocation reason must be ${MAX_REVOCATION_REASON_LENGTH} characters or fewer`
         );
+      }
+
+      if (!(await ensureBlockchainWriteReady(res))) {
+        return;
       }
 
       const submission = await CertificateSubmissionModel.findOne({ tokenId });

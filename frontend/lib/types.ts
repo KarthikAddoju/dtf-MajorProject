@@ -216,6 +216,7 @@ export interface VerificationRecord {
 
 export interface PlatformHealth {
   status: "ok" | "degraded"
+  version: string
   checkedAt: string
   services: {
     api: {
@@ -228,8 +229,13 @@ export interface PlatformHealth {
     blockchain: {
       status: "connected" | "degraded"
       chainId: number | null
+      observedChainId: number | null
+      expectedChainId: number
+      chainIdMatchesConfig: boolean
+      persistentDevnet: boolean
       blockNumber: number | null
       contractsReady: boolean
+      warnings: string[]
     }
     ipfs: {
       status: "configured" | "missing"

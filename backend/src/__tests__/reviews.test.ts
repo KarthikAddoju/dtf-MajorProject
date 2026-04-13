@@ -12,6 +12,7 @@ const getTransactionReceiptMock: jest.Mock = jest.fn();
 const getTransactionMock: jest.Mock = jest.fn();
 const getBlockMock: jest.Mock = jest.fn();
 const parseDualMintReceiptMock: jest.Mock = jest.fn();
+const getBlockchainReadinessMock: jest.Mock = jest.fn();
 
 jest.mock("../models/CertificateSubmission", () => ({
   CertificateSubmissionModel: {
@@ -38,6 +39,10 @@ jest.mock("../services/ipfs", () => ({
 
 jest.mock("../lib/reviewers", () => ({
   assertInstituteReviewerAccess: assertInstituteReviewerAccessMock,
+}));
+
+jest.mock("../lib/blockchainReadiness", () => ({
+  getBlockchainReadiness: getBlockchainReadinessMock,
 }));
 
 jest.mock("../services/blockchain", () => ({
@@ -97,6 +102,28 @@ function createSubmissionDoc(
   return Object.assign(base, overrides);
 }
 
+function buildConnectedReadiness() {
+  return {
+    status: "connected" as const,
+    chainId: 31337,
+    observedChainId: 31337,
+    expectedChainId: 31337,
+    chainIdMatchesConfig: true,
+    persistentDevnet: true,
+    blockNumber: 123,
+    contractsReady: true,
+    warnings: [],
+    contracts: {
+      poctAddress: "0x0000000000000000000000000000000000000001",
+      poctDeployed: true,
+      eduAddress: "0x0000000000000000000000000000000000000002",
+      eduDeployed: true,
+      mintControllerAddress: "0x0000000000000000000000000000000000000003",
+      mintControllerDeployed: true,
+    },
+  };
+}
+
 describe("review routes", () => {
   beforeEach(() => {
     certificateSubmissionFindByIdMock.mockReset();
@@ -109,7 +136,9 @@ describe("review routes", () => {
     getTransactionMock.mockReset();
     getBlockMock.mockReset();
     parseDualMintReceiptMock.mockReset();
+    getBlockchainReadinessMock.mockReset();
     (assertInstituteReviewerAccessMock as any).mockResolvedValue(true);
+    (getBlockchainReadinessMock as any).mockResolvedValue(buildConnectedReadiness());
   });
 
   it("returns the existing mint draft when prepare-mint is retried", async () => {
@@ -163,6 +192,79 @@ describe("review routes", () => {
     expect(buildPreparedPublicProofMock).not.toHaveBeenCalled();
     expect(uploadJsonToIPFSMock).not.toHaveBeenCalled();
     expect(certificateSubmissionFindOneAndUpdateMock).not.toHaveBeenCalled();
+  });
+
+  it("blocks prepare-mint while blockchain readiness is degraded", async () => {
+    (getBlockchainReadinessMock as any).mockResolvedValue({
+      ...buildConnectedReadiness(),
+      status: "degraded",
+      contractsReady: false,
+      warnings: ["Could not reach the configured RPC endpoint."],
+    });
+
+    const res = createMockResponse();
+    const handler = getRouteHandler(reviewRoutes, "post", "/:submissionId/prepare-mint");
+
+    await handler(
+      {
+        params: { submissionId: "507f1f77bcf86cd799439011" },
+        body: {
+          eduAmount: 25,
+        },
+        user: {
+          address: "0x2222222222222222222222222222222222222222",
+          role: "verifier",
+        },
+      } as unknown as Request,
+      res
+    );
+
+    expect(res.statusCode).toBe(503);
+    expect(res.body).toEqual(
+      expect.objectContaining({
+        success: false,
+        error: expect.objectContaining({
+          code: "BLOCKCHAIN_UNAVAILABLE",
+        }),
+      })
+    );
+    expect(certificateSubmissionFindByIdMock).not.toHaveBeenCalled();
+  });
+
+  it("blocks finalize-mint while blockchain readiness is degraded", async () => {
+    (getBlockchainReadinessMock as any).mockResolvedValue({
+      ...buildConnectedReadiness(),
+      status: "degraded",
+      contractsReady: false,
+      warnings: ["No contract code found at POCT_ADDRESS on chain 31337."],
+    });
+
+    const res = createMockResponse();
+    const handler = getRouteHandler(reviewRoutes, "post", "/:submissionId/finalize-mint");
+
+    await handler(
+      {
+        params: { submissionId: "507f1f77bcf86cd799439011" },
+        body: { txHash: "0xtxhash" },
+        user: {
+          address: "0x1111111111111111111111111111111111111111",
+          role: "student",
+        },
+      } as unknown as Request,
+      res
+    );
+
+    expect(res.statusCode).toBe(503);
+    expect(res.body).toEqual(
+      expect.objectContaining({
+        success: false,
+        error: expect.objectContaining({
+          code: "BLOCKCHAIN_UNAVAILABLE",
+        }),
+      })
+    );
+    expect(certificateSubmissionFindByIdMock).not.toHaveBeenCalled();
+    expect(getTransactionReceiptMock).not.toHaveBeenCalled();
   });
 
   it("rejects finalize-mint when the transaction receipt reverted", async () => {

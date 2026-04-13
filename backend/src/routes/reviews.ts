@@ -1,7 +1,8 @@
-import { Router } from "express";
+import { Router, type Response } from "express";
 import { ethers } from "ethers";
 import { authenticate, authorize, type AuthRequest } from "../middleware/authMiddleware";
 import { sendError, sendSuccess, handleServerError } from "../lib/api";
+import { getBlockchainReadiness } from "../lib/blockchainReadiness";
 import { parsePositiveNumber, isOptionalString, isValidObjectId } from "../lib/validation";
 import { CertificateSubmissionModel } from "../models/CertificateSubmission";
 import { InstituteModel } from "../models/Institute";
@@ -29,6 +30,8 @@ import {
  */
 const router = Router();
 const MAX_REVIEW_NOTE_LENGTH = 1000;
+const BLOCKCHAIN_UNAVAILABLE_MESSAGE =
+  "The active chain is unavailable or the configured contracts are not deployed on it yet.";
 const mintControllerInterface = new ethers.Interface(mintControllerAbi);
 
 /**
@@ -186,6 +189,31 @@ function buildMintPayload(
   };
 }
 
+async function ensureBlockchainWriteReady(res: Response) {
+  const blockchainReadiness = await getBlockchainReadiness();
+
+  if (
+    blockchainReadiness.status === "connected" &&
+    blockchainReadiness.contractsReady &&
+    blockchainReadiness.chainId !== null
+  ) {
+    return true;
+  }
+
+  const detail = blockchainReadiness.warnings[0];
+
+  sendError(
+    res,
+    503,
+    "BLOCKCHAIN_UNAVAILABLE",
+    detail
+      ? `${detail} Retry after GET /api/health reports a connected blockchain.`
+      : BLOCKCHAIN_UNAVAILABLE_MESSAGE
+  );
+
+  return false;
+}
+
 /**
  * Prepares the exact wallet-signing payload for a mint without broadcasting on-chain.
  *
@@ -260,6 +288,10 @@ router.post(
           "VALIDATION_ERROR",
           "Expiry date must be in the future"
         );
+      }
+
+      if (!(await ensureBlockchainWriteReady(res))) {
+        return;
       }
 
       const submission = await CertificateSubmissionModel.findById(submissionId);
@@ -456,6 +488,10 @@ router.post(
           "VALIDATION_ERROR",
           "submissionId and txHash are required"
         );
+      }
+
+      if (!(await ensureBlockchainWriteReady(res))) {
+        return;
       }
 
       const submission = await CertificateSubmissionModel.findById(submissionId);

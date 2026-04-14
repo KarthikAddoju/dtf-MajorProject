@@ -172,47 +172,6 @@ export default function HomePage() {
     isSupportedNetwork,
     user?.role,
   ])
-  const guidedJourneys = useMemo(
-    () => [
-      {
-        title: "Student Journey",
-        eyebrow: "Submission Flow",
-        accent: "text-emerald-300",
-        steps: [
-          "Connect wallet and sign in with MetaMask.",
-          "Drag and drop a certificate into the upload workspace.",
-          "Track review, mint, and EDU reward outcomes on the dashboard.",
-        ],
-        href: isAuthenticated && user?.role === "student" ? "/upload" : "/dashboard",
-        cta: isAuthenticated && user?.role === "student" ? "Continue Student Flow" : "View Dashboard",
-      },
-      {
-        title: "Reviewer Journey",
-        eyebrow: "Verification Flow",
-        accent: "text-amber-200",
-        steps: [
-          "Open the review console and inspect the pending queue.",
-          "Preview private evidence, assign reward amount, and prepare the public proof package.",
-          "Approve to submit a wallet-signed mint transaction or revoke with a tracked audit event.",
-        ],
-        href: "/admin",
-        cta: "Open Review Console",
-      },
-      {
-        title: "Public Trust Journey",
-        eyebrow: "Verification Flow",
-        accent: "text-[#a0a0a0]",
-        steps: [
-          "Verify a credential by token ID on the public page.",
-          "Inspect lifecycle evidence, proof contracts, and QR-linked shareable output.",
-          "Explore the colleges leaderboard to compare EDU output by institute.",
-        ],
-        href: "/verify",
-        cta: "Verify A Credential",
-      },
-    ],
-    [isAuthenticated, user?.role]
-  )
   const sessionTiles = useMemo(
     () => [
       {
@@ -563,80 +522,30 @@ export default function HomePage() {
           </div>
         </div>
 
-        <div className="grid gap-8 xl:grid-cols-[0.92fr_1.08fr] xl:items-start">
-          <div className="brand-panel p-8">
-            <div className="text-[11px] uppercase tracking-[0.3em] text-[#a0a0a0]">
-              Demo Runbook
-            </div>
-            <h2 className="mt-2 text-[2.4rem] font-semibold text-[#f0f0f0]">
-              Four beats for a confident final presentation
-            </h2>
-            <p className="mt-3 max-w-2xl text-[#a0a0a0]">
-              Use this sequence when you want DACS to feel like a finished trust
-              product rather than a disconnected set of screens.
-            </p>
-
-            <div className="mt-8 space-y-4">
-              {demoChecklist.map((step, index) => (
-                <div
-                  key={step}
-                  className="grid gap-4 rounded-xl border border-white/[0.06] bg-[rgba(255,255,255,0.03)] p-4 sm:grid-cols-[48px_1fr]"
-                >
-                  <div className="flex h-12 w-12 items-center justify-center rounded-[18px] bg-[#1d2b4a] text-sm font-semibold text-[#a5c0f8]">
-                    {index + 1}
-                  </div>
-                  <p className="self-center text-[#a0a0a0]">{step}</p>
-                </div>
-              ))}
-            </div>
+        <div className="brand-panel p-8">
+          <div className="text-[11px] uppercase tracking-[0.3em] text-[#a0a0a0]">
+            Demo Runbook
           </div>
+          <h2 className="mt-2 text-[2.4rem] font-semibold text-[#f0f0f0]">
+            Four beats for a confident final presentation
+          </h2>
+          <p className="mt-3 max-w-2xl text-[#a0a0a0]">
+            Use this sequence when you want DACS to feel like a finished trust
+            product rather than a disconnected set of screens.
+          </p>
 
-          <div className="brand-panel-light p-8">
-            <div className="text-[11px] uppercase tracking-[0.3em] text-[#666666]">
-              Guided Product Paths
-            </div>
-            <h2 className="mt-2 text-[2.4rem] font-semibold text-[#f0f0f0]">
-              Each user type gets a distinct journey.
-            </h2>
-            <p className="mt-3 max-w-2xl text-[#a0a0a0]">
-              DACS is strongest when the path feels intentional for whoever opens the
-              product first: student, reviewer, or public verifier.
-            </p>
-
-            <div className="mt-8 space-y-4">
-              {guidedJourneys.map((journey) => (
-                <div
-                  key={journey.title}
-                  className="rounded-xl border border-white/[0.08] bg-[#2a2a2a] p-5 shadow-[0_12px_30px_rgba(8,12,20,0.06)]"
-                >
-                  <div className={`text-[11px] uppercase tracking-[0.3em] ${journey.accent}`}>
-                    {journey.eyebrow}
-                  </div>
-                  <h3 className="mt-2 text-[1.9rem] font-semibold text-[#f0f0f0]">
-                    {journey.title}
-                  </h3>
-                  <div className="mt-4 grid gap-3">
-                    {journey.steps.map((step, index) => (
-                      <div
-                        key={step}
-                        className="grid gap-3 rounded-xl border border-white/[0.06] bg-white/55 p-3 text-sm text-[#a0a0a0] sm:grid-cols-[30px_1fr]"
-                      >
-                        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#1a1a1a] text-xs font-semibold text-[#f0f0f0]">
-                          {index + 1}
-                        </div>
-                        <p>{step}</p>
-                      </div>
-                    ))}
-                  </div>
-                  <Link
-                    href={journey.href}
-                    className="mt-5 inline-flex rounded-full border border-white/[0.08] bg-[#1a1a1a] px-4 py-2.5 text-sm font-semibold text-[#f0f0f0] transition hover:bg-[#172136]"
-                  >
-                    {journey.cta}
-                  </Link>
+          <div className="mt-8 grid gap-4 md:grid-cols-2">
+            {demoChecklist.map((step, index) => (
+              <div
+                key={step}
+                className="grid gap-4 rounded-xl border border-white/[0.06] bg-[rgba(255,255,255,0.03)] p-4 sm:grid-cols-[48px_1fr]"
+              >
+                <div className="flex h-12 w-12 items-center justify-center rounded-[18px] bg-[#1d2b4a] text-sm font-semibold text-[#a5c0f8]">
+                  {index + 1}
                 </div>
-              ))}
-            </div>
+                <p className="self-center text-[#a0a0a0]">{step}</p>
+              </div>
+            ))}
           </div>
         </div>
 

@@ -448,8 +448,17 @@ export async function analyseEvidence(
   )
 
   if (!response.ok) {
-    const body = await response.json().catch(() => ({})) as { error?: string }
-    throw new Error(body.error ?? "Certificate analysis failed")
+    const body = (await response.json().catch(() => null)) as ApiEnvelope | null
+    const errorEnvelope = isApiErrorEnvelope(body) ? body.error : undefined
+
+    throw new ApiError(
+      errorEnvelope?.message ?? "AI analysis is temporarily unavailable. Continue the review manually.",
+      {
+        status: response.status,
+        code: errorEnvelope?.code ?? "AI_ANALYSIS_UNAVAILABLE",
+        fieldErrors: errorEnvelope?.fieldErrors,
+      }
+    )
   }
 
   return response.json() as Promise<AiInsight>

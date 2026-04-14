@@ -1,6 +1,6 @@
 "use client"
 
-import { ethers } from "ethers"
+import { id as keccakId } from "ethers"
 import Image from "next/image"
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
@@ -16,6 +16,7 @@ import { StatusBanner } from "@/components/StatusBanner"
 import { WalletBadge } from "@/components/WalletBadge"
 import { useAuth } from "@/components/AuthProvider"
 import {
+  ApiError,
   analyseEvidence,
   createInstitute,
   fetchAllSubmissions,
@@ -165,7 +166,11 @@ function getBlockchainActionBlockedReason(platformHealth: PlatformHealth | null)
     return `Configured contract code is missing for ${missingContracts.join(", ")} on chain ${platformHealth.services.blockchain.observedChainId ?? platformHealth.services.blockchain.chainId ?? "unknown"}.`
   }
 
-  return "Blockchain write actions are temporarily unavailable."
+  if (!isBlockchainWriteReady(platformHealth)) {
+    return "Blockchain write actions are temporarily unavailable."
+  }
+
+  return null
 }
 
 function toDateTimeLocalValue(value: string | null) {
@@ -191,12 +196,17 @@ function AiInsightPanel({
   insight: AiInsight
   onUseSuggestion: (amount: number) => void
 }) {
+  const isFallback = insight.source === "fallback"
   const confidenceTone =
     insight.confidence === "high"
       ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-300"
       : insight.confidence === "medium"
         ? "border-white/[0.10] bg-white/[0.04] text-amber-200"
         : "border-rose-500/25 bg-rose-500/10 text-rose-300"
+  const summary =
+    insight.rawSummary && insight.rawSummary !== insight.warning
+      ? insight.rawSummary
+      : null
 
   const rows: { label: string; value: string | null }[] = [
     { label: "Institution", value: insight.institution },
@@ -215,13 +225,24 @@ function AiInsightPanel({
             <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456Z" />
           </svg>
           <span className="text-xs font-semibold uppercase tracking-[0.22em] text-[#4f7ef5]">
-            AI Analysis
+            {isFallback ? "AI Fallback" : "AI Analysis"}
           </span>
+          {isFallback ? (
+            <span className="rounded-full border border-amber-500/25 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-200">
+              Metadata only
+            </span>
+          ) : null}
         </div>
         <div className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] ${confidenceTone}`}>
           {insight.confidence} confidence
         </div>
       </div>
+
+      {insight.warning ? (
+        <div className="mb-3 rounded-lg border border-amber-500/20 bg-amber-500/8 px-3 py-2 text-xs text-amber-100">
+          {insight.warning}
+        </div>
+      ) : null}
 
       <div className="mb-3 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
         {rows.map(({ label, value }) =>
@@ -234,9 +255,9 @@ function AiInsightPanel({
         )}
       </div>
 
-      {insight.rawSummary ? (
+      {summary ? (
         <p className="mb-3 text-xs italic text-slate-500 [overflow-wrap:anywhere]">
-          &ldquo;{insight.rawSummary}&rdquo;
+          &ldquo;{summary}&rdquo;
         </p>
       ) : null}
 
@@ -606,7 +627,12 @@ export default function AdminPage() {
       const insight = await analyseEvidence(token, submission.id)
       setAiStates((s) => ({ ...s, [submission.id]: { status: "done", insight } }))
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Analysis failed"
+      const message =
+        err instanceof ApiError && err.status >= 500
+          ? "AI analysis is temporarily unavailable. Continue the review manually."
+          : err instanceof Error
+            ? err.message
+            : "Analysis failed"
       setAiStates((s) => ({ ...s, [submission.id]: { status: "error", message } }))
     }
   }
@@ -697,7 +723,7 @@ export default function AdminPage() {
       const revokeTransaction = await submitCredentialRevocation(
         wallet.signer,
         submission.tokenId,
-        ethers.id(normalizedReason)
+        keccakId(normalizedReason)
       )
       const receipt = await revokeTransaction.wait()
 

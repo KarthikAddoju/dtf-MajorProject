@@ -12,6 +12,21 @@ export interface CertificateInsight {
   suggestedEduAmount: number;
   suggestionReason: string;
   rawSummary: string;
+  source?: "gemini" | "fallback";
+  warning?: string | null;
+}
+
+interface CertificateInsightFallbackInput {
+  institution: string | null;
+  courseName: string | null;
+  credentialType: string | null;
+  warning: string;
+}
+
+interface GeminiFailureSummary {
+  code: "quota_exceeded" | "temporarily_unavailable";
+  message: string;
+  retryAfterSeconds: number | null;
 }
 
 const PROMPT = `You are a certificate verification assistant for an academic credential blockchain system called DACS.
@@ -54,6 +69,132 @@ const responseSchema: Schema = {
   },
   required: ["confidence", "suggestedEduAmount", "suggestionReason", "rawSummary"],
 };
+
+const BASE_SUGGESTED_EDU_BY_CREDENTIAL_TYPE: Record<string, number> = {
+  internship: 32,
+  hackathon: 25,
+  competition: 25,
+  certification: 20,
+  bootcamp: 18,
+  workshop: 12,
+  course: 12,
+  seminar: 5,
+  quiz: 5,
+  other: 7,
+};
+
+function clampSuggestedEduAmount(value: number) {
+  return Math.max(1, Math.min(100, Math.round(value)));
+}
+
+function normalizeCredentialType(credentialType: string | null) {
+  if (!credentialType) {
+    return "other";
+  }
+
+  const normalized = credentialType.trim().toLowerCase();
+
+  return BASE_SUGGESTED_EDU_BY_CREDENTIAL_TYPE[normalized]
+    ? normalized
+    : "other";
+}
+
+function getInstitutionTierBonus(institution: string | null) {
+  if (!institution) {
+    return 0;
+  }
+
+  if (
+    /\b(iit|iim|nit|iiit|bits|stanford|harvard|mit|oxford|cambridge|indian institute of technology|indian institute of management|national institute of technology)\b/i.test(
+      institution
+    )
+  ) {
+    return 10;
+  }
+
+  if (/\b(university|institute of technology|college)\b/i.test(institution)) {
+    return 5;
+  }
+
+  return 0;
+}
+
+function extractRetryAfterSeconds(message: string) {
+  const match = message.match(/retry in\s+([\d.]+)s/i);
+
+  if (!match) {
+    return null;
+  }
+
+  const parsed = Number.parseFloat(match[1]);
+
+  return Number.isFinite(parsed) ? Math.ceil(parsed) : null;
+}
+
+function getErrorStatus(error: unknown) {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "status" in error &&
+    typeof (error as { status?: unknown }).status === "number"
+  ) {
+    return (error as { status: number }).status;
+  }
+
+  return null;
+}
+
+export function summarizeGeminiFailure(error: unknown): GeminiFailureSummary {
+  const rawMessage =
+    error instanceof Error
+      ? error.message
+      : "AI analysis is temporarily unavailable.";
+  const retryAfterSeconds = extractRetryAfterSeconds(rawMessage);
+  const status = getErrorStatus(error);
+
+  if (status === 429 || /quota exceeded|resource_exhausted/i.test(rawMessage)) {
+    return {
+      code: "quota_exceeded",
+      retryAfterSeconds,
+      message: retryAfterSeconds
+        ? `Live Gemini quota is exhausted right now, so DACS is using a metadata-only fallback. Retry in about ${retryAfterSeconds} seconds or continue the review manually.`
+        : "Live Gemini quota is exhausted right now, so DACS is using a metadata-only fallback. Continue the review manually before minting.",
+    };
+  }
+
+  return {
+    code: "temporarily_unavailable",
+    retryAfterSeconds,
+    message:
+      "Live AI analysis is temporarily unavailable, so DACS is using a metadata-only fallback. Review the uploaded evidence manually before minting.",
+  };
+}
+
+export function buildFallbackCertificateInsight(
+  input: CertificateInsightFallbackInput
+): CertificateInsight {
+  const normalizedCredentialType = normalizeCredentialType(input.credentialType);
+  const suggestedEduAmount = clampSuggestedEduAmount(
+    BASE_SUGGESTED_EDU_BY_CREDENTIAL_TYPE[normalizedCredentialType] +
+      getInstitutionTierBonus(input.institution)
+  );
+
+  return {
+    institution: input.institution,
+    courseName: input.courseName,
+    credentialType: input.credentialType,
+    grade: null,
+    issueDate: null,
+    durationOrCredits: null,
+    confidence: "low",
+    suggestedEduAmount,
+    suggestionReason:
+      "This suggestion uses submission metadata only because live document analysis is unavailable. Verify the uploaded evidence manually before minting.",
+    rawSummary: input.warning,
+    source: "fallback",
+    warning: input.warning,
+  };
+}
 
 function isNullableString(value: unknown): value is string | null {
   return value === null || typeof value === "string";
@@ -130,5 +271,9 @@ export async function analyseCertificate(
     throw new Error("Gemini returned an invalid certificate insight payload");
   }
 
-  return parsed;
+  return {
+    ...parsed,
+    source: "gemini",
+    warning: null,
+  };
 }

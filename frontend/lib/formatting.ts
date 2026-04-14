@@ -15,7 +15,15 @@ export function formatDateTime(value: string | null) {
   }).format(new Date(value))
 }
 
-export function truncateValue(value: string, start = 10, end = 8) {
+export function truncateValue(
+  value: string | null | undefined,
+  start = 10,
+  end = 8
+) {
+  if (!value) {
+    return "Not available"
+  }
+
   if (value.length <= start + end) {
     return value
   }
@@ -53,7 +61,16 @@ export function getCredentialTypeAccent(type: CredentialType | string): string {
   }
 }
 
-export function getAuditTrailEventAccent(type: AuditTrailEventType) {
+const DEFAULT_AUDIT_TRAIL_EVENT_ACCENT = {
+  badge:
+    "border border-white/15 bg-white/[0.05] text-slate-300",
+  icon:
+    "border border-white/15 bg-white/[0.05] text-slate-300",
+} as const
+
+export function getAuditTrailEventAccent(
+  type: AuditTrailEventType | string | null | undefined
+) {
   switch (type) {
     case "submission_created":
       return {
@@ -97,10 +114,14 @@ export function getAuditTrailEventAccent(type: AuditTrailEventType) {
         icon:
           "border border-orange-500/30 bg-orange-500/10 text-orange-200",
       }
+    default:
+      return DEFAULT_AUDIT_TRAIL_EVENT_ACCENT
   }
 }
 
-export function getAuditTrailEventIcon(type: AuditTrailEventType) {
+export function getAuditTrailEventIcon(
+  type: AuditTrailEventType | string | null | undefined
+) {
   switch (type) {
     case "submission_created":
       return "UP"
@@ -114,6 +135,8 @@ export function getAuditTrailEventIcon(type: AuditTrailEventType) {
       return "RV"
     case "submission_reset":
       return "RS"
+    default:
+      return "EV"
   }
 }
 

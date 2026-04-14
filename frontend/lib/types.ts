@@ -268,6 +268,8 @@ export interface AiInsight {
   suggestedEduAmount: number
   suggestionReason: string
   rawSummary: string
+  source?: "gemini" | "fallback"
+  warning?: string | null
 }
 
 export interface UploadSubmissionInput {

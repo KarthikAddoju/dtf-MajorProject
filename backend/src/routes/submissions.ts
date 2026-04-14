@@ -7,6 +7,7 @@ import { isOptionalString, isValidObjectId } from "../lib/validation";
 import { buildReviewerSubmissionScope, assertInstituteReviewerAccess } from "../lib/reviewers";
 import { formatRequestLogPrefix } from "../lib/requestId";
 import { toSubmissionResponse } from "../lib/submissionResponses";
+import { hasEncryptedEvidence } from "../services/evidenceVault";
 
 /**
  * Submission listing and reviewer decision routes for admin, verifier, and student dashboards.
@@ -16,6 +17,23 @@ const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
 const MAX_REVIEW_NOTE_LENGTH = 1000;
+
+async function isPendingSubmissionReviewReady(
+  submission: {
+    instituteHash?: string | null;
+    evidenceHash?: string | null;
+    privateEvidenceRef?: string | null;
+  }
+) {
+  if (
+    !submission.instituteHash?.trim() ||
+    !submission.evidenceHash?.trim()
+  ) {
+    return false;
+  }
+
+  return hasEncryptedEvidence(submission.privateEvidenceRef);
+}
 
 /**
  * Parses common page/limit query parameters used by submission lists.
@@ -118,9 +136,15 @@ router.get("/pending", authenticate, authorize("admin", "verifier"), async (req:
     }
 
     const { page, limit, skip } = parsePagination(req.query);
-    const filter = { ...reviewerScope, status: "pending_review" };
+    const filter = {
+      ...reviewerScope,
+      status: "pending_review",
+      instituteHash: { $exists: true, $nin: [null, ""] },
+      evidenceHash: { $exists: true, $nin: [null, ""] },
+      privateEvidenceRef: { $exists: true, $nin: [null, ""] },
+    };
 
-    const [submissions, total] = await Promise.all([
+    const [rawSubmissions, total] = await Promise.all([
       CertificateSubmissionModel.find(filter)
         .sort({ uploadedAt: 1 })
         .skip(skip)
@@ -129,9 +153,19 @@ router.get("/pending", authenticate, authorize("admin", "verifier"), async (req:
       CertificateSubmissionModel.countDocuments(filter),
     ]);
 
+    const readinessChecks = await Promise.all(
+      rawSubmissions.map((submission) => isPendingSubmissionReviewReady(submission))
+    );
+    const submissions = rawSubmissions.filter((_, index) => readinessChecks[index]);
+
     return sendSuccess(res, {
       submissions: submissions.map(toSubmissionResponse),
-      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+      pagination: {
+        page,
+        limit,
+        total: Math.min(total, submissions.length),
+        totalPages: submissions.length === 0 ? 0 : Math.ceil(Math.min(total, submissions.length) / limit),
+      },
     });
   } catch (error) {
     return handleServerError(res, error, "Could not load pending submissions");

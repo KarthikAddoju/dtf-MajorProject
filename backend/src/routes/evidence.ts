@@ -5,13 +5,19 @@ import { CertificateSubmissionModel } from "../models/CertificateSubmission";
 import { InstituteModel } from "../models/Institute";
 import { isValidObjectId } from "../lib/validation";
 import { instituteHasVerifierAddress } from "../lib/reviewers";
-import { readEncryptedEvidence } from "../services/evidenceVault";
-import { analyseCertificate } from "../services/geminiAnalyser";
+import { hasEncryptedEvidence, readEncryptedEvidence } from "../services/evidenceVault";
+import {
+  analyseCertificate,
+  buildFallbackCertificateInsight,
+  summarizeGeminiFailure,
+} from "../services/geminiAnalyser";
 
 /**
  * Authenticated private-evidence download and analysis routes.
  */
 const router = Router();
+const EVIDENCE_UNAVAILABLE_MESSAGE =
+  "The private evidence file is no longer available for this submission. Re-upload the credential evidence before reviewing it.";
 
 /**
  * Returns the encrypted evidence payload for a submission the caller can access.
@@ -68,6 +74,15 @@ router.get("/:submissionId", authenticate, async (req: AuthRequest, res) => {
       return sendError(res, 403, "FORBIDDEN", "Forbidden");
     }
 
+    if (!(await hasEncryptedEvidence(submission.privateEvidenceRef))) {
+      return sendError(
+        res,
+        409,
+        "EVIDENCE_UNAVAILABLE",
+        EVIDENCE_UNAVAILABLE_MESSAGE
+      );
+    }
+
     const evidenceBuffer = await readEncryptedEvidence(submission.privateEvidenceRef);
     const disposition =
       req.query.download === "1" ? "attachment" : "inline";
@@ -110,7 +125,9 @@ router.post("/:submissionId/analyse", authenticate, async (req: AuthRequest, res
     }
 
     const submission = await CertificateSubmissionModel.findById(submissionId)
-      .select("status privateEvidenceRef mimeType")
+      .select(
+        "status privateEvidenceRef mimeType instituteName courseName credentialType"
+      )
       .lean();
 
     if (!submission) {
@@ -126,12 +143,46 @@ router.post("/:submissionId/analyse", authenticate, async (req: AuthRequest, res
       );
     }
 
-    const evidenceBuffer = await readEncryptedEvidence(submission.privateEvidenceRef);
-    const insight = await analyseCertificate(evidenceBuffer, submission.mimeType);
+    if (!(await hasEncryptedEvidence(submission.privateEvidenceRef))) {
+      return sendError(
+        res,
+        409,
+        "EVIDENCE_UNAVAILABLE",
+        EVIDENCE_UNAVAILABLE_MESSAGE
+      );
+    }
 
-    return res.json(insight);
+    const evidenceBuffer = await readEncryptedEvidence(submission.privateEvidenceRef);
+    try {
+      const insight = await analyseCertificate(evidenceBuffer, submission.mimeType);
+      return res.json(insight);
+    } catch (error) {
+      const failure = summarizeGeminiFailure(error);
+
+      console.warn(
+        `[AI Analysis Fallback] submission=${submissionId} reason=${failure.code}${
+          failure.retryAfterSeconds !== null
+            ? ` retryAfterSeconds=${failure.retryAfterSeconds}`
+            : ""
+        }`
+      );
+
+      return res.json(
+        buildFallbackCertificateInsight({
+          institution: submission.instituteName ?? null,
+          courseName: submission.courseName ?? null,
+          credentialType: submission.credentialType ?? null,
+          warning: failure.message,
+        })
+      );
+    }
   } catch (error) {
-    return handleServerError(res, error, "Could not analyse evidence");
+    return sendError(
+      res,
+      503,
+      "AI_ANALYSIS_UNAVAILABLE",
+      "AI analysis is temporarily unavailable. Continue the review manually."
+    );
   }
 });
 

@@ -13,6 +13,7 @@ export const AUDIT_TRAIL_EVENT_TYPES = [
 ] as const;
 
 export type AuditTrailEventType = (typeof AUDIT_TRAIL_EVENT_TYPES)[number];
+const AUDIT_TRAIL_EVENT_TYPE_SET = new Set<string>(AUDIT_TRAIL_EVENT_TYPES);
 
 export interface AuditTrailEventInput {
   type: AuditTrailEventType;
@@ -24,12 +25,24 @@ export interface AuditTrailEventInput {
 
 interface AuditTrailEventLike {
   _id?: unknown;
-  type: AuditTrailEventType;
+  type: string;
   title: string;
   description?: string;
   actorAddress?: string;
   createdAt: Date;
   metadata?: Record<string, unknown>;
+}
+
+function normalizeAuditTrailEventType(type: string): AuditTrailEventType {
+  if (type === "chain_reset_recovery") {
+    return "submission_reset";
+  }
+
+  if (AUDIT_TRAIL_EVENT_TYPE_SET.has(type)) {
+    return type as AuditTrailEventType;
+  }
+
+  return "submission_reset";
 }
 
 /**
@@ -56,12 +69,14 @@ export function createAuditTrailEvent({
  * Converts a stored audit entry into the API response shape used by the dashboard.
  */
 export function toAuditTrailResponse(event: AuditTrailEventLike) {
+  const normalizedType = normalizeAuditTrailEventType(event.type);
+
   return {
     id:
       typeof event._id === "object" && event._id instanceof Types.ObjectId
         ? event._id.toString()
-        : String(event._id ?? `${event.type}-${event.createdAt.toISOString()}`),
-    type: event.type,
+        : String(event._id ?? `${normalizedType}-${event.createdAt.toISOString()}`),
+    type: normalizedType,
     title: event.title,
     description: event.description ?? null,
     actorAddress: event.actorAddress ?? null,

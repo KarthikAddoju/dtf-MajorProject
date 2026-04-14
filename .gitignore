@@ -49,6 +49,7 @@ backend/private-evidence/
 # TypeScript / Turbo / misc caches
 *.tsbuildinfo
 .turbo/
+.playwright/
 .playwright-cli/
 .claude/
 frontend/playwright-report/

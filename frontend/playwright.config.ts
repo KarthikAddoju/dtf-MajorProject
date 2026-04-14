@@ -6,7 +6,8 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
-  reporter: "html",
+  outputDir: "../.playwright/frontend-test-results",
+  reporter: [["html", { open: "never", outputFolder: "../.playwright/frontend-report" }]],
   webServer: {
     command: "npm run dev",
     port: 3000,

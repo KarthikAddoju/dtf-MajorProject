@@ -43,6 +43,10 @@ export function AuditTrailList({
     <div className="space-y-3">
       {events.map((event) => {
         const accent = getAuditTrailEventAccent(event.type)
+        const eventTypeLabel =
+          typeof event.type === "string" && event.type.trim()
+            ? event.type.replaceAll("_", " ")
+            : "unknown event"
         const metadataEntries = Object.entries(event.metadata ?? {}).filter(([, value]) =>
           formatMetadataValue(value)
         )
@@ -77,7 +81,7 @@ export function AuditTrailList({
                   <div
                     className={`rounded-full px-3 py-1 text-xs font-medium uppercase tracking-[0.18em] ${accent.badge}`}
                   >
-                    {event.type.replaceAll("_", " ")}
+                    {eventTypeLabel}
                   </div>
                 </div>
 

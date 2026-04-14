@@ -78,3 +78,18 @@ export async function readEncryptedEvidence(privateEvidenceRef: string) {
 
   return Buffer.concat([decipher.update(ciphertext), decipher.final()]);
 }
+
+export async function hasEncryptedEvidence(
+  privateEvidenceRef: string | null | undefined
+) {
+  if (!privateEvidenceRef) {
+    return false;
+  }
+
+  try {
+    await fs.access(resolveEvidencePath(privateEvidenceRef));
+    return true;
+  } catch {
+    return false;
+  }
+}

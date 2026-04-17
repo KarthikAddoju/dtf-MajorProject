@@ -126,7 +126,7 @@ router.post("/:submissionId/analyse", authenticate, async (req: AuthRequest, res
 
     const submission = await CertificateSubmissionModel.findById(submissionId)
       .select(
-        "status privateEvidenceRef mimeType instituteName courseName credentialType"
+        "status privateEvidenceRef mimeType instituteName courseName credentialType aiInsight"
       )
       .lean();
 
@@ -143,6 +143,11 @@ router.post("/:submissionId/analyse", authenticate, async (req: AuthRequest, res
       );
     }
 
+    // Return cached insight if available (unless ?refresh=1 forces re-analysis)
+    if (submission.aiInsight && req.query?.refresh !== "1") {
+      return res.json(submission.aiInsight);
+    }
+
     if (!(await hasEncryptedEvidence(submission.privateEvidenceRef))) {
       return sendError(
         res,
@@ -155,6 +160,13 @@ router.post("/:submissionId/analyse", authenticate, async (req: AuthRequest, res
     const evidenceBuffer = await readEncryptedEvidence(submission.privateEvidenceRef);
     try {
       const insight = await analyseCertificate(evidenceBuffer, submission.mimeType);
+
+      // Cache the successful insight on the submission
+      await CertificateSubmissionModel.updateOne(
+        { _id: submissionId },
+        { $set: { aiInsight: insight } }
+      );
+
       return res.json(insight);
     } catch (error) {
       const failure = summarizeGeminiFailure(error);

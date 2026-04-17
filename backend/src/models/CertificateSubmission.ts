@@ -243,6 +243,10 @@ const certificateSubmissionSchema = new Schema(
       type: String,
       trim: true,
     },
+    aiInsight: {
+      type: Schema.Types.Mixed,
+      default: null,
+    },
     expiresAt: {
       type: Date,
       index: true,

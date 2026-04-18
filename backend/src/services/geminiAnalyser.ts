@@ -236,7 +236,7 @@ export async function analyseCertificate(
 
   const response = await Promise.race([
     ai.models.generateContent({
-      model: "gemini-2.0-flash",
+      model: "gemini-2.5-flash",
       contents: [
         { text: PROMPT },
         {
@@ -249,6 +249,7 @@ export async function analyseCertificate(
       config: {
         responseMimeType: "application/json",
         responseSchema,
+        thinkingConfig: { thinkingBudget: 0 },
       },
     }),
     new Promise<never>((_, reject) =>
